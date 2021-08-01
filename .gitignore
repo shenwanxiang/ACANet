@@ -1,0 +1,11 @@
+.ipynb_checkpoints
+__pycache__
+tmpignore
+fingerprint_cosine.cfg.gzip
+*.gzip
+*.pyc
+#paper
+
+*/.ipynb_checkpoints/*
+*/__pycache__/*
+*/tempignore/*

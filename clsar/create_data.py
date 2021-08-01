@@ -1,22 +1,13 @@
 import pandas as pd
 import numpy as np
 import os
-import json,pickle
-from collections import OrderedDict
+
 from rdkit import Chem
-from rdkit.Chem import MolFromSmiles
 import networkx as nx
-from util import *
+from util import TestbedDataset 
 
-import sys, os
-from random import shuffle
-import torch
-import torch.nn as nn
 
-from torch_geometric.data import InMemoryDataset
-from torch_geometric.data import DataLoader as GDL
-from torch.utils.data  import DataLoader as DL
-from torch_geometric import data as DATA
+
 
 def atom_features(atom):
     return np.array(one_of_k_encoding_unk(atom.GetSymbol(),['C', 'N', 'O', 'S', 'F', 'Si', 'P', 'Cl', 'Br', 'Mg', 'Na','Ca', 'Fe', 'As', 'Al', 'I', 'B', 'V', 'K', 'Tl', 'Yb','Sb', 'Sn', 'Ag', 'Pd', 'Co', 'Se', 'Ti', 'Zn', 'H','Li', 'Ge', 'Cu', 'Au', 'Ni', 'Cd', 'In', 'Mn', 'Zr','Cr', 'Pt', 'Hg', 'Pb', 'Unknown']) +

@@ -1,0 +1,5 @@
+#rdkit 2020.09.1.0
+
+torch==1.8.1
+torch-geometric==1.7.0
+torch-sparse==0.6.9
