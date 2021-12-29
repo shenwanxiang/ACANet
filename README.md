@@ -13,3 +13,5 @@ conda create -c conda-forge -n clsar rdkit
 conda activate clsar
 pip install -r ./requirements.txt 
 ```
+
+
