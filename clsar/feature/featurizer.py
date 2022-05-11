@@ -1,241 +1,172 @@
-import os
-import torch
-import pickle
-import collections
-import math
 import pandas as pd
-import numpy as np
-import networkx as nx
+import torch
+import torch.nn.functional as F
 from rdkit import Chem
-from rdkit.Chem import Descriptors
-from rdkit.Chem import AllChem
-from rdkit import DataStructs
-from rdkit.Chem.rdMolDescriptors import GetMorganFingerprintAsBitVect
-from torch.utils import data
-from torch_geometric.data import Data
-from torch_geometric.data import InMemoryDataset
-from torch_geometric.data import Batch
-from itertools import repeat, product, chain
 
-# allowable node and edge features
-allowable_features = {
-    'possible_atomic_num_list' : list(range(1, 119)),
-    'possible_formal_charge_list' : [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5],
-    'possible_chirality_list' : [
-        Chem.rdchem.ChiralType.CHI_UNSPECIFIED,
-        Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
-        Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
-        Chem.rdchem.ChiralType.CHI_OTHER
-    ],
-    'possible_hybridization_list' : [
-        Chem.rdchem.HybridizationType.S,
-        Chem.rdchem.HybridizationType.SP, Chem.rdchem.HybridizationType.SP2,
-        Chem.rdchem.HybridizationType.SP3, Chem.rdchem.HybridizationType.SP3D,
-        Chem.rdchem.HybridizationType.SP3D2, Chem.rdchem.HybridizationType.UNSPECIFIED
-    ],
-    'possible_numH_list' : [0, 1, 2, 3, 4, 5, 6, 7, 8],
-    'possible_implicit_valence_list' : [0, 1, 2, 3, 4, 5, 6],
-    'possible_degree_list' : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    'possible_bonds' : [
-        Chem.rdchem.BondType.SINGLE,
-        Chem.rdchem.BondType.DOUBLE,
-        Chem.rdchem.BondType.TRIPLE,
-        Chem.rdchem.BondType.AROMATIC
-    ],
-    'possible_bond_dirs' : [ # only for double bond stereo information
-        Chem.rdchem.BondDir.NONE,
-        Chem.rdchem.BondDir.ENDUPRIGHT,
-        Chem.rdchem.BondDir.ENDDOWNRIGHT
-    ]
-}
+from .atomfeat import AtomFeaturizer
 
-def atom_features(atom):
-    return np.array(one_of_k_encoding_unk(atom.GetSymbol(),['C', 'N', 'O', 'S', 'F', 'Si', 'P', 'Cl', 'Br', 'Mg', 'Na','Ca', 'Fe', 'As', 'Al', 'I', 'B', 'V', 'K', 'Tl', 'Yb','Sb', 'Sn', 'Ag', 'Pd', 'Co', 'Se', 'Ti', 'Zn', 'H','Li', 'Ge', 'Cu', 'Au', 'Ni', 'Cd', 'In', 'Mn', 'Zr','Cr', 'Pt', 'Hg', 'Pb', 'Unknown']) +
-                    one_of_k_encoding(atom.GetDegree(), [0, 1, 2, 3, 4, 5, 6,7,8,9,10]) +
-                    one_of_k_encoding_unk(atom.GetTotalNumHs(), [0, 1, 2, 3, 4, 5, 6,7,8,9,10]) +
-                    one_of_k_encoding_unk(atom.GetImplicitValence(), [0, 1, 2, 3, 4, 5, 6,7,8,9,10]) +
-                    [atom.GetIsAromatic()])#共78维
-def edge_features(edge):
-    #print(edge.GetBondType())
-    #print(edge.GetBondDir())
-    return np.array(one_of_k_encoding(edge.GetBondType(), [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE,Chem.rdchem.BondType.AROMATIC]) +
-                    one_of_k_encoding(edge.GetBondDir(), [Chem.rdchem.BondDir.NONE, Chem.rdchem.BondDir.ENDUPRIGHT, Chem.rdchem.BondDir.ENDDOWNRIGHT])
-                   )#共7维
-def one_of_k_encoding(x, allowable_set):
-    if x not in allowable_set:
-        raise Exception("input {0} not in allowable set{1}:".format(x, allowable_set))
-    return list(map(lambda s: x == s, allowable_set))
 
-def one_of_k_encoding_unk(x, allowable_set):
-    if x not in allowable_set:
-        x = allowable_set[-1]
-    return list(map(lambda s: x == s, allowable_set))
-'''
-提取部分特征
-'''
-def mol_to_graph_data_obj_onehot(mol):
-    #print(smile, type(smile))
-    #mol = Chem.MolFromSmiles(smile)#从smiles得到分子
-    c_size = mol.GetNumAtoms()
-    atom_attr = []
-    for atom in mol.GetAtoms():
-        feature = atom_features(atom)
-        #@@@ 这里除了一下 @@@
-        atom_attr.append( feature / sum(feature) )
-    x = torch.tensor(np.array(atom_attr), dtype=torch.float64)
-
-    edge_attr = []
-    edge_list = []
-    for bond in mol.GetBonds():
-        edge_list.append((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()))
-        edge_list.append((bond.GetEndAtomIdx(), bond.GetBeginAtomIdx()))
-        feature = edge_features(bond)
-        edge_attr.append(feature)
-        edge_attr.append(feature)
-    edge_index = torch.tensor(np.array(edge_list).T, dtype=torch.long)
-    edge_attr = torch.tensor(np.array(edge_attr))
-
-    #g = nx.Graph(edges).to_directed() #@@@ 为啥要再变成nx
-    #edge_index = []
-    #for e1, e2 in g.edges:
-    #    edge_index.append([e1, e2])
-    #data = Data(x=features, edge_index = edge_index, edge_attribute = )
-    #return c_size, features, edge_index
-
-    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr )
-    return data
-
-'''
-增加至115个原子特征， 数据scale
-'''
-from atomfeat import Featurizer
-SMI = 'BC[C@H](I)C[C@@H](CBr)C1=C(C#N)C(=CC([NH2+]C(=O)[C@H](C)S)=C1Cl)P(=O)=O'
-df = pd.DataFrame(Featurizer(SMI).atomfeats)
-df1 = df[df.columns[:76]] #binary
-df2 = df[df.columns[76:]] #numeric
-x2_max = df2.max().values
-x2_min = df2.min().values
-def scale_continuous_feat(x2):
-    return (x2_max-x2-0.001) / (x2_max-x2_min)
-
-def mol_to_graph_data_obj_custom(mol, scale = False):
-    ## 115 dim atom feats
-    atomfeats = Featurizer(Chem.MolToSmiles(mol)).atomfeats
-    df = pd.DataFrame(atomfeats)
-    df1 = df[df.columns[:76]] #binary
-    df2 = df[df.columns[76:]] #numeric
-    x1 = df1.values
-    x2 = df2.values
-    if scale:
-        x2 = scale_continuous_feat(x2)
-    atom_attr  = np.concatenate([x1, x2], axis=1)
-    x = torch.tensor(atom_attr, dtype=torch.float64)
+class Gen115AtomFeatures(object):
     
-    edge_attr = []
-    edge_list = []
-    for bond in mol.GetBonds():
-        edge_list.append((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()))
-        edge_list.append((bond.GetEndAtomIdx(), bond.GetBeginAtomIdx()))
-        feature = edge_features(bond)
-        edge_attr.append(feature)
-        edge_attr.append(feature)
-    edge_index = torch.tensor(np.array(edge_list).T, dtype=torch.long)
-    edge_attr = torch.tensor(np.array(edge_attr))
-
-    #g = nx.Graph(edges).to_directed() #@@@ 为啥要再变成nx
-    #edge_index = []
-    #for e1, e2 in g.edges:
-    #    edge_index.append([e1, e2])
-    #data = Data(x=features, edge_index = edge_index, edge_attribute = )
-    #return c_size, features, edge_index
-    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr )
-    return data
-
-
-
-def mol_to_graph_data_obj_pseudo(mol, dim = 115, seed = 123):
     '''
-    dim: 原子特征的维度， 该方法生成随机的 “伪特征”
+    115 various atom features:
+    F = Featurizer(smiles)
+    F.atom_types_feature:62
+    F.atom_bonds_feature:5          
+    F.atom_rings_feature:6          
+    F.atom_lipinski_feature:3       
+    F.atom_estate_indice:1          
+    F.atom_descriptors_conribs:4    
+    F.atom_env_feature:10            
+    F.atom_inherent_feature:24       
     '''
-    torch.manual_seed(seed)
-    ## gennerate a pseudo feature lookup table, 1000 atoms to lookup
-    emb = torch.nn.Embedding(1000, dim)
-    torch.nn.init.xavier_uniform_(emb.weight.data)
-    pseudo_feat_lookup_array = emb.weight.data.numpy()
-    pseudo_atom_feats = []
-    for atom in mol.GetAtoms():
-        aid = atom.GetAtomicNum()
-        pseudo_atom_feats.append(pseudo_feat_lookup_array[aid])
-    x = torch.tensor(np.stack(pseudo_atom_feats, axis=0), dtype=torch.float64)
+
     
-    edge_attr = []
-    edge_list = []
-    for bond in mol.GetBonds():
-        edge_list.append((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()))
-        edge_list.append((bond.GetEndAtomIdx(), bond.GetBeginAtomIdx()))
-        feature = edge_features(bond)
-        edge_attr.append(feature)
-        edge_attr.append(feature)
-    edge_index = torch.tensor(np.array(edge_list).T, dtype=torch.long)
-    edge_attr = torch.tensor(np.array(edge_attr))
+    def __init__(self):
+        
+        self.stereos = [
+            Chem.rdchem.BondStereo.STEREONONE,
+            Chem.rdchem.BondStereo.STEREOANY,
+            Chem.rdchem.BondStereo.STEREOZ,
+            Chem.rdchem.BondStereo.STEREOE,
+        ]
+    
+    
+    def __call__(self, data):
+        
+        # Generate the 115 features.
+        mol = Chem.MolFromSmiles(data.smiles)
+        AF = AtomFeaturizer(data.smiles)
+        afs = {}
+        afs.update(AF.atom_types_feature)
+        afs.update(AF.atom_bonds_feature)
+        afs.update(AF.atom_rings_feature)
+        afs.update(AF.atom_lipinski_feature)
+        afs.update(AF.atom_estate_indice)
+        afs.update(AF.atom_descriptors_conribs)
+        afs.update(AF.atom_env_feature)
+        afs.update(AF.atom_inherent_feature)   
 
-    #g = nx.Graph(edges).to_directed() #@@@ 为啥要再变成nx
-    #edge_index = []
-    #for e1, e2 in g.edges:
-    #    edge_index.append([e1, e2])
-    #data = Data(x=features, edge_index = edge_index, edge_attribute = )
-    #return c_size, features, edge_index
-    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr )
-    return data
+        df = pd.DataFrame(afs)
+        df = df.fillna(0)
+        x = df.clip(0,1).values #clip to 0-1 if not in this range
+        data.x = torch.tensor(x)
 
-
-
-
-def mol_to_graph_data_obj_simple(mol):
-    """
-    Converts rdkit mol object to graph Data object required by the pytorch
-    geometric package. NB: Uses simplified atom and bond features, and represent
-    as indices
-    :param mol: rdkit mol object
-    :return: graph data object with the attributes: x, edge_index, edge_attr
-    """
-    # atoms
-    num_atom_features = 2   # 这里是有指定原子的一些特征比如atom type,  chirality tag，这是两维的，每个维度一个值表示类型，比如【3，5】
-    atom_features_list = [] #两维列表
-    for atom in mol.GetAtoms(): #对每个原子提取特征
-        atom_feature = [allowable_features['possible_atomic_num_list'].index(
-            atom.GetAtomicNum())] + [allowable_features[
-            'possible_chirality_list'].index(atom.GetChiralTag())]
-        atom_features_list.append(atom_feature)
-    x = torch.tensor(np.array(atom_features_list), dtype=torch.long)
-
-    # bonds
-    num_bond_features = 2   # 边的一些特征比如bond type, bond direction
-    if len(mol.GetBonds()) > 0: # mol has bonds
-        edges_list = []
-        edge_features_list = []
+        
+        edge_indices = []
+        edge_attrs = []
         for bond in mol.GetBonds():
-            i = bond.GetBeginAtomIdx()
-            j = bond.GetEndAtomIdx()
-            edge_feature = [allowable_features['possible_bonds'].index(
-                bond.GetBondType())] + [allowable_features[
-                                            'possible_bond_dirs'].index(
-                bond.GetBondDir())]
-            edges_list.append((i, j))
-            edge_features_list.append(edge_feature)
-            edges_list.append((j, i))
-            edge_features_list.append(edge_feature)
+            edge_indices += [[bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()]]
+            edge_indices += [[bond.GetEndAtomIdx(), bond.GetBeginAtomIdx()]]
 
-        # data.edge_index: Graph connectivity in COO format with shape [2, num_edges]
-        edge_index = torch.tensor(np.array(edges_list).T, dtype=torch.long)
+            bond_type = bond.GetBondType()
+            single = 1. if bond_type == Chem.rdchem.BondType.SINGLE else 0.
+            double = 1. if bond_type == Chem.rdchem.BondType.DOUBLE else 0.
+            triple = 1. if bond_type == Chem.rdchem.BondType.TRIPLE else 0.
+            aromatic = 1. if bond_type == Chem.rdchem.BondType.AROMATIC else 0.
+            conjugation = 1. if bond.GetIsConjugated() else 0.
+            ring = 1. if bond.IsInRing() else 0.
+            stereo = [0.] * 4
+            stereo[self.stereos.index(bond.GetStereo())] = 1.
 
-        # data.edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edge_attr = torch.tensor(np.array(edge_features_list),
-                                 dtype=torch.long)
-    else:   # mol has no bonds
-        edge_index = torch.empty((2, 0), dtype=torch.long)
-        edge_attr = torch.empty((0, num_bond_features), dtype=torch.long)
+            edge_attr = torch.tensor(
+                [single, double, triple, aromatic, conjugation, ring] + stereo)
 
-    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr) #转化为torch_geometric的graoh类型
+            edge_attrs += [edge_attr, edge_attr]
 
-    return data
+        if len(edge_attrs) == 0:
+            data.edge_index = torch.zeros((2, 0), dtype=torch.long)
+            data.edge_attr = torch.zeros((0, 10), dtype=torch.float)
+        else:
+            data.edge_index = torch.tensor(edge_indices).t().contiguous()
+            data.edge_attr = torch.stack(edge_attrs, dim=0)
+
+        return data
+    
+    
+class GenAttentiveFeatures(object):
+    '''
+    AttentiveFP 39 node features generation
+    '''
+    def __init__(self):
+        self.symbols = [
+            'B', 'C', 'N', 'O', 'F', 'Si', 'P', 'S', 'Cl', 'As', 'Se', 'Br',
+            'Te', 'I', 'At', 'other'
+        ]
+
+        self.hybridizations = [
+            Chem.rdchem.HybridizationType.SP,
+            Chem.rdchem.HybridizationType.SP2,
+            Chem.rdchem.HybridizationType.SP3,
+            Chem.rdchem.HybridizationType.SP3D,
+            Chem.rdchem.HybridizationType.SP3D2,
+            'other',
+        ]
+
+        self.stereos = [
+            Chem.rdchem.BondStereo.STEREONONE,
+            Chem.rdchem.BondStereo.STEREOANY,
+            Chem.rdchem.BondStereo.STEREOZ,
+            Chem.rdchem.BondStereo.STEREOE,
+        ]
+
+    def __call__(self, data):
+        # Generate AttentiveFP features according to Table 1.
+        mol = Chem.MolFromSmiles(data.smiles)
+
+        xs = []
+        for atom in mol.GetAtoms():
+            symbol = [0.] * len(self.symbols)
+            symbol[self.symbols.index(atom.GetSymbol())] = 1.
+            degree = [0.] * 6
+            degree[atom.GetDegree()] = 1.
+            formal_charge = atom.GetFormalCharge()
+            radical_electrons = atom.GetNumRadicalElectrons()
+            hybridization = [0.] * len(self.hybridizations)
+            hybridization[self.hybridizations.index(
+                atom.GetHybridization())] = 1.
+            aromaticity = 1. if atom.GetIsAromatic() else 0.
+            hydrogens = [0.] * 5
+            hydrogens[atom.GetTotalNumHs()] = 1.
+            chirality = 1. if atom.HasProp('_ChiralityPossible') else 0.
+            chirality_type = [0.] * 2
+            if atom.HasProp('_CIPCode'):
+                chirality_type[['R', 'S'].index(atom.GetProp('_CIPCode'))] = 1.
+
+            x = torch.tensor(symbol + degree + [formal_charge] +
+                             [radical_electrons] + hybridization +
+                             [aromaticity] + hydrogens + [chirality] +
+                             chirality_type)
+            xs.append(x)
+
+        data.x = torch.stack(xs, dim=0)
+
+        edge_indices = []
+        edge_attrs = []
+        for bond in mol.GetBonds():
+            edge_indices += [[bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()]]
+            edge_indices += [[bond.GetEndAtomIdx(), bond.GetBeginAtomIdx()]]
+
+            bond_type = bond.GetBondType()
+            single = 1. if bond_type == Chem.rdchem.BondType.SINGLE else 0.
+            double = 1. if bond_type == Chem.rdchem.BondType.DOUBLE else 0.
+            triple = 1. if bond_type == Chem.rdchem.BondType.TRIPLE else 0.
+            aromatic = 1. if bond_type == Chem.rdchem.BondType.AROMATIC else 0.
+            conjugation = 1. if bond.GetIsConjugated() else 0.
+            ring = 1. if bond.IsInRing() else 0.
+            stereo = [0.] * 4
+            stereo[self.stereos.index(bond.GetStereo())] = 1.
+
+            edge_attr = torch.tensor(
+                [single, double, triple, aromatic, conjugation, ring] + stereo)
+
+            edge_attrs += [edge_attr, edge_attr]
+
+        if len(edge_attrs) == 0:
+            data.edge_index = torch.zeros((2, 0), dtype=torch.long)
+            data.edge_attr = torch.zeros((0, 10), dtype=torch.float)
+        else:
+            data.edge_index = torch.tensor(edge_indices).t().contiguous()
+            data.edge_attr = torch.stack(edge_attrs, dim=0)
+
+        return data

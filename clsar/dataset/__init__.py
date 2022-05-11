@@ -1,0 +1,1 @@
+from .low_inhibitors import LSSInhibitor
