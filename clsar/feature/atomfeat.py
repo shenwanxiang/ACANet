@@ -9,8 +9,10 @@ Created on Sat Oct  5 18:39:44 2019
 """
 
 
-from meta import META_TABLE as MT
-from meta import ORGANIC
+from .atommeta import META_TABLE as MT
+from .atommeta import Scaled_ATOMIC_META_TABLE as SAMT
+
+from .atommeta import ORGANIC
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -49,8 +51,8 @@ BONDTYPES = ['SINGLE', 'DOUBLE', 'TRIPLE', 'AROMATIC']
 #N MemberedRings
 RINGTYPES = [3, 4, 5, 6]
 
-#atom inherent features
-MT = MT[MT.columns[2:]]
+#scaled atom inherent features
+#SAMT
 
 
 
@@ -109,7 +111,7 @@ def GetAtomInherentAttr(atomic_number):
     ----------------
     atomic_number:  int, such as 6 stands for Carbon atom, result of atom.GetAtomicNum() 
     """
-    return MT.loc[atomic_number].to_dict()
+    return SAMT.loc[atomic_number].to_dict()
 
         
         
@@ -132,7 +134,7 @@ def GetAtomBasicAttr(atom):
 
 
 
-class Featurizer(object):
+class AtomFeaturizer(object):
     
     def __init__(self, smiles, include_hydrogen = False):
         """Atom featurizer
@@ -163,7 +165,9 @@ class Featurizer(object):
         atom_types = EState.AtomTypes.TypeAtoms(mol)
         
         #get estate indices
-        atom_estate_indices = EState.EState.EStateIndices(mol)
+        estate_indice_config = {'maxv': 17.43, 'minv': -10.47, 'gap': 27.9} #obtained by 2357 approved drugs
+        atom_estate_indices = EState.EState.EStateIndices(mol) 
+        atom_estate_indices = (atom_estate_indices - estate_indice_config['minv']) / estate_indice_config['gap'] #scale
         
         #get atom Lipinski
         atom_HAcceptors = Lipinski._HAcceptors(mol)
@@ -199,7 +203,15 @@ class Featurizer(object):
         self._atom_tpsa = atom_tpsa
         self._atom_asa = atom_asa
         
-        
+        # atom_features, dict type
+        self.atom_types_feature = self._atom_type_feature()
+        self.atom_bonds_feature = self._bonds_feature()
+        self.atom_rings_feature = self._rings_feature()
+        self.atom_lipinski_feature = self._lipinski_feature()
+        self.atom_estate_indice = {'estate_indice':self._atom_estate_indices}
+        self.atom_descriptors_conribs = self._descriptors_conribs()
+        self.atom_env_feature = self._atom_env_feature()
+        self.atom_inherent_feature = self._inherent_feature()
 
     def _atom_type_feature(self):
         """one-hot atom types feature: symbol types, estate types, hydrid types, chirality types """
@@ -268,6 +280,13 @@ class Featurizer(object):
         
     def _bonds_feature(self):
         """atom bonds feature: number of RTB, SINGLE, DOUBLE, TRIPLE ..."""
+        ## data obtained by 2375 approved organic drugs        
+        config = {'num_ROTATABLE_bonds': {'maxv': 4.0, 'minv': 0.0, 'gap': 4.0},
+                  'num_SINGLE_bonds': {'maxv': 6.0, 'minv': 0.0, 'gap': 6.0},
+                  'num_DOUBLE_bonds': {'maxv': 2.0, 'minv': 0.0, 'gap': 2.0},
+                  'num_TRIPLE_bonds': {'maxv': 1.0, 'minv': 0.0, 'gap': 1.0},
+                  'num_AROMATIC_bonds': {'maxv': 3.0, 'minv': 0.0, 'gap': 3.0}}
+        
         bonds_feature = {}
         x = []
         for i in self._atom_RotatableBonds:
@@ -276,7 +295,7 @@ class Featurizer(object):
         idx_rtb_num = dict((i, x.count(i)) for i in x)
         value = np.zeros((self.mol.GetNumAtoms(),))
         value[list(idx_rtb_num.keys())] = list(idx_rtb_num.values())
-        bonds_feature['num_ROTATABLE_bonds'] = value           
+        bonds_feature['num_ROTATABLE_bonds'] = (value - config['num_ROTATABLE_bonds']['minv']) / config['num_ROTATABLE_bonds']['gap'] #scale           
         
 
         bond_types = []
@@ -287,7 +306,7 @@ class Featurizer(object):
         for bond in BONDTYPES:
             key = 'num_%s_bonds' % bond
             value = [at_bond.get(bond, 0) for at_bond in bond_types]
-            bonds_feature[key] = np.array(value)
+            bonds_feature[key] = (np.array(value) - config[key]['minv']) / config[key]['gap'] #scale
     
         return bonds_feature
     
@@ -323,16 +342,22 @@ class Featurizer(object):
         
     def _descriptors_conribs(self):
         """contribs of logp, mr, tpsa, asa"""
+        ## data obtained by 2375 approved organic drugs
+        config = {'logp_contribs': {'maxv': 0.89, 'minv': -3.0, 'gap': 3.89},
+                  'mr_contribs': {'maxv': 14.02, 'minv': 0.0, 'gap': 14.02},
+                  'tpsa_contribs': {'maxv': 36.5, 'minv': 0.0, 'gap': 36.5},
+                  'asa_contribs': {'maxv': 23.98, 'minv': 1.37, 'gap': 22.61}}
         descrip_feature = {}
         logp = []
         mr = []
         for i in self._atom_logp_mr:
             logp.append(i[0])
             mr.append(i[1])
-        descrip_feature['logp_contribs'] = np.array(logp)
-        descrip_feature['mr_contribs'] = np.array(mr)
-        descrip_feature['tpsa_contribs'] = np.array(self._atom_tpsa)        
-        descrip_feature['asa_contribs'] = np.array(self._atom_asa)
+            
+        feature_names = ['logp_contribs', 'mr_contribs', 'tpsa_contribs', 'asa_contribs']
+        feature_values = [logp, mr, self._atom_tpsa, self._atom_asa]
+        for fn, fv in zip(feature_names, feature_values):
+            descrip_feature[fn] = (np.array(fv) - config[fn]['minv']) / config[fn]['gap'] #scale
         
         return descrip_feature
         
@@ -349,8 +374,20 @@ class Featurizer(object):
         return pos_f
         
         
-    def _basic_feature(self):
-        """atom basic features"""
+    def _atom_env_feature(self):
+        """atom basic env features"""
+        ## data obtained by 2375 approved organic drugs        
+        config = {'atomic_number': {'maxv': 53.0, 'minv': 1.0, 'gap': 52.0},
+                  'degree': {'maxv': 6.0, 'minv': 0.0, 'gap': 6.0},
+                  'explicit_valence': {'maxv': 6.0, 'minv': 0.0, 'gap': 6.0},
+                  'implicit_valence': {'maxv': 4.0, 'minv': 0.0, 'gap': 4.0},
+                  'valence': {'maxv': 6.0, 'minv': 0.0, 'gap': 6.0},
+                  'num_implicit_hydrogens': {'maxv': 4.0, 'minv': 0.0, 'gap': 4.0},
+                  'num_explicit_hydrogens': {'maxv': 4.0, 'minv': 0.0, 'gap': 4.0},
+                  'num_hydrogens': {'maxv': 4.0, 'minv': 0.0, 'gap': 4.0},
+                  'formal_charge': {'maxv': 1.0, 'minv': -1.0, 'gap': 2.0},
+                  'gasteiger_charge': {'maxv': 0.63, 'minv': -1.0, 'gap': 1.63}}
+
         features = []
         for atom in self.mol.GetAtoms():
             atom_f = GetAtomBasicAttr(atom)
@@ -360,7 +397,7 @@ class Featurizer(object):
         df = df[list(atom_f.keys())]
         res = {}
         for i in df.columns:
-            res[i] = df[i].values
+            res[i] = (df[i].values - config[i]['minv']) / config[i]['gap'] #scale
     
         return res
     
@@ -391,34 +428,36 @@ class Featurizer(object):
         return res
         
 
+    
+    
     @property
-    def atomfeats(self):
+    def allatomfeats(self):
         """Atom Features"""
         feature_dict = {}
         
         #atom types
-        feature_dict.update(self._atom_type_feature())
+        feature_dict.update({'atom_types_feature':self.atom_types_feature})
 
         #atom bonds num feature
-        feature_dict.update(self._bonds_feature())
+        feature_dict.update({'atom_bonds_feature':self.atom_bonds_feature})
 
         #atom ring feature
-        feature_dict.update(self._rings_feature())
+        feature_dict.update({'atom_rings_feature':self.atom_rings_feature})
 
         #atom lipinski feature
-        feature_dict.update(self._lipinski_feature())
+        feature_dict.update({'atom_lipinski_feature':self.atom_lipinski_feature})
         
         #atom estate indices
-        feature_dict.update({'estate_indice': self._atom_estate_indices})
+        feature_dict.update({'atom_estate_indice': self.atom_estate_indice})
         
         #atom logp, mr, tpsa, asa contribs
-        feature_dict.update(self._descriptors_conribs())
+        feature_dict.update({'atom_descriptors_conribs':self.atom_descriptors_conribs}) 
         
         #atom basic inherent feature
-        feature_dict.update(self._basic_feature())        
-                
+        feature_dict.update({'atom_env_feature':self.atom_env_feature})        
+
         #atom inherent feature
-        feature_dict.update(self._inherent_feature())
+        feature_dict.update({'atom_inherent_feature':self.atom_inherent_feature})
         return feature_dict
 
     
@@ -431,6 +470,6 @@ class Featurizer(object):
     
 if __name__ == '__main__':
     
-    F = Featurizer(smiles)
+    F = AtomFeaturizer(smiles)
     smiles = 'CC(C)[C@@H](C(=O)N1CCC[C@H]1C(=O)Nc2ccc(cc2)[C@@H]3CC[C@H](N3c4ccc(cc4)C(C)(C)C)c5ccc(cc5)NC(=O)[C@@H]6CCCN6C(=O)[C@H](C(C)C)NC(=O)OC)NC(=O)OC'
-    print(pd.DataFrame(F.atomfeats))
+    print(pd.DataFrame(F.allatomfeats))
