@@ -1,4 +1,4 @@
-<a href="url"><img src="./misc/logo.png" align="left" height="130" width="130" ></a>
+<a href="url"><img src="./misc/logo.png" align="left" height="130" width="140" ></a>
 # CL-SAR
 Contrastive learning of structure-activity relationship
 
