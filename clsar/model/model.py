@@ -75,6 +75,20 @@ class ACNet_Base(torch.nn.Module):
         self.jk = JumpingKnowledge(self.jk_mode, hidden_channels, num_layers)
         self.lin = Linear(num_layers * hidden_channels, self.out_channels)
         
+        model_args = {'in_channels':self.in_channels, 
+                'hidden_channels':self.hidden_channels, 
+                'out_channels':self.out_channels,
+                'edge_dim':self.edge_dim, 
+                'num_layers': self.num_layers, 
+                'dropout_p':self.dropout_p, 
+                'batch_norms':self.batch_norms,
+                'global_pool':self.global_pool
+               }
+        for k, v in kwargs.items():
+            model_args[k] = v
+        self.model_args = model_args
+        
+
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -110,11 +124,11 @@ class ACNet_Base(torch.nn.Module):
         x = self.jk(xs)
         
         # global pooling layer, please replace it with fuctinal group pooling @cuichao
-        x = self.global_pool(x, batch)
+        embed = self.global_pool(x, batch)
         
         # output
-        x = self.lin(x)
-        return x 
+        y = self.lin(embed)
+        return y, embed 
     
     
     
