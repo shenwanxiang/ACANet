@@ -77,14 +77,44 @@ def get_triplet_mask(labels, cliff, device):
     return mask    
 
 
+    
+def get_triplet_mask2(labels, device, cliff_lower = 0.2, cliff_upper=1.0):
+
+    indices_equal = torch.eye(labels.shape[0]).bool()
+    indices_not_equal = torch.logical_not(indices_equal)
+    i_not_equal_j = torch.unsqueeze(indices_not_equal, 2)
+    i_not_equal_k = torch.unsqueeze(indices_not_equal, 1)
+    j_not_equal_k = torch.unsqueeze(indices_not_equal, 0)
+
+    distinct_indices = torch.logical_and(torch.logical_and(i_not_equal_j, i_not_equal_k), j_not_equal_k).to(device)
+
+    #labels = torch.unsqueeze(labels, -1)
+    #print('labels:',labels)
+    target_l1_dist = torch.cdist(labels,labels,p=1) 
+    label_equal = target_l1_dist < cliff_lower #0.5
+    label_unequal  = target_l1_dist > cliff_upper #1.5
+    
+    #print('label_equal:',label_equal)
+    i_equal_j = torch.unsqueeze(label_equal, 2)
+    #i_equal_k = torch.unsqueeze(label_equal, 1)
+    i_unequal_k = torch.unsqueeze(label_unequal, 1)
+    
+    valid_labels = torch.logical_and(i_equal_j, i_unequal_k).to(device)
+    #print('val_indice',valid_labels[0])
+
+    mask = torch.logical_and(distinct_indices, valid_labels)
+    return mask   
+
 
 def ada_batch_all_triplet_loss(embeddings, 
                                predictions, 
                                labels, 
                                device, 
                                cliff=0.5, 
-                               weight=0.005, 
-                               squared=False):
+                               alpha=0.1, 
+                               squared=False,
+                               reg_mse = False
+                              ):
     '''
        union loss of a batch (mae loss and triplet loss with adaptive margin)
        -------------------------------
@@ -120,13 +150,82 @@ def ada_batch_all_triplet_loss(embeddings,
     triplet_loss = torch.maximum(triplet_loss, torch.tensor([0.0]).to(device))
     # 计算valid的triplet的个数，然后对所有的triplet loss求平均
     valid_triplets = (triplet_loss> 1e-16).float()
-    num_positive_triplets = torch.sum(valid_triplets)
-    num_valid_triplets = torch.sum(mask) / 3.0
+    num_positive_triplets = torch.sum(valid_triplets) # torch.where
+    num_valid_triplets = torch.sum(mask) #100, (a, p, n) #
     
     #print(num_valid_triplets, mask.shape)
     
     triplet_loss = torch.sum(triplet_loss) / (num_valid_triplets + 1e-16)
-    mae_loss = torch.mean((labels-predictions).abs())
-    union_loss = mae_loss + weight*triplet_loss
+ 
+    if reg_mse:
+        reg_loss = torch.mean((labels-predictions).abs()**2)
+    else:
+        reg_loss = torch.mean((labels-predictions).abs())
+
+    union_loss = reg_loss + alpha*triplet_loss
     
-    return union_loss, triplet_loss, mae_loss, num_positive_triplets
+    return union_loss, triplet_loss, reg_loss, num_positive_triplets
+
+
+
+def ada_batch_all_triplet_loss2(embeddings, 
+                               predictions, 
+                               labels, 
+                               device, 
+                               cliff_lower=0.3,
+                               cliff_upper = 1.0,
+                               alpha=1.0, 
+                               squared=False,
+                               reg_mse = False
+                              ):
+    '''
+       union loss of a batch (mae loss and triplet loss with adaptive margin)
+       -------------------------------
+       Args:
+          labels:     shape = （batch_size,）
+          embeddings: 提取的特征向量， shape = (batch_size, vector_size)
+          margin:     margin大小， scalar
+       Returns:
+         union_loss: scalar, 一个batch的损失值
+    '''
+
+    # 得到每两两embeddings的距离，然后增加一个维度，一维需要得到（batch_size, batch_size, batch_size）大小的3D矩阵
+    # 然后再点乘上valid 的 mask即可
+  
+    labels_dist = (labels - labels.T).abs()  
+
+    margin_pos =  labels_dist.unsqueeze(2)
+    margin_neg =  labels_dist.unsqueeze(1)
+    margin = margin_neg - margin_pos
+
+    pairwise_dis = pairwise_distance(embeddings=embeddings, squared=squared)
+    anchor_positive_dist = pairwise_dis.unsqueeze(2)
+    assert anchor_positive_dist.shape[2] == 1, "{}".format(anchor_positive_dist.shape)
+    anchor_negative_dist = pairwise_dis.unsqueeze(1)
+    assert anchor_negative_dist.shape[1] == 1, "{}".format(anchor_negative_dist.shape)
+    #triplet_loss = anchor_positive_dist - anchor_negative_dist + margin
+    triplet_loss = anchor_positive_dist - anchor_negative_dist + margin
+
+    mask = get_triplet_mask2(labels=labels, device=device, cliff_lower = cliff_lower, cliff_upper=cliff_upper)
+
+    mask = mask.float()
+
+    triplet_loss = torch.mul(mask, triplet_loss)
+    triplet_loss = torch.maximum(triplet_loss, torch.tensor([0.0]).to(device))
+    # 计算valid的triplet的个数，然后对所有的triplet loss求平均
+    valid_triplets = (triplet_loss> 1e-16).float()
+    num_positive_triplets = torch.sum(valid_triplets) # torch.where
+    num_valid_triplets = torch.sum(mask) #100, (a, p, n) #
+    
+    #print(num_valid_triplets, mask.shape)
+    
+    triplet_loss = torch.sum(triplet_loss) / (num_valid_triplets + 1e-16)
+ 
+    if reg_mse:
+        reg_loss = torch.mean((labels-predictions).abs()**2)
+    else:
+        reg_loss = torch.mean((labels-predictions).abs())
+
+    union_loss = reg_loss + alpha*triplet_loss
+    
+    return union_loss, triplet_loss, reg_loss, num_positive_triplets
