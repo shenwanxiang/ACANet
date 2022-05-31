@@ -23,7 +23,7 @@ from clsar.model import ACNet_GCN, ACNet_GIN, ACNet_GAT, ACNet_PNA # model
 from clsar.model.loss import ada_batch_all_triplet_loss
 
 
-def train(model, train_loader, device, cliff, alpha):
+def train(model, train_loader, device, cliff, weight):
     total_examples = 0
     total_loss =  0    
     total_triplet_loss = 0
@@ -70,7 +70,7 @@ def train(model, train_loader, device, cliff, alpha):
 
 
 @torch.no_grad()
-def test(model, loader, device, cliff, alpha):
+def test(model, loader, device, cliff, weight):
     total_examples = 0
     total_loss =  0    
     total_triplet_loss = 0
