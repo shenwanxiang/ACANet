@@ -1,1 +1,1 @@
-from .low_inhibitors import LSSInhibitor
+from clsar.dataset.data import LSSNS, HSSMS
