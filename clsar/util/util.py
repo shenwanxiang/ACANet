@@ -13,6 +13,7 @@ from loader import mol_to_graph_data_obj_simple, \
 from loader import MoleculeDataset
 
 
+
 def check_same_molecules(s1, s2):
     mol1 = AllChem.MolFromSmiles(s1)
     mol2 = AllChem.MolFromSmiles(s2)

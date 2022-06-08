@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 def cudafy(module):
     if torch.cuda.is_available():
@@ -229,3 +231,52 @@ def ada_batch_all_triplet_loss2(embeddings,
     union_loss = reg_loss + alpha*triplet_loss
     
     return union_loss, triplet_loss, reg_loss, num_positive_triplets
+
+
+'''
+ada_batch_hard_triplet_loss
+'''
+def get_anchor_positive_triplet_mask(labels, cliff):
+
+    indices_equal = torch.eye(labels.shape[0]).bool().cuda() #--
+    indices_not_equal = torch.logical_not(indices_equal)                 
+
+    #labels = torch.unsqueeze(labels, -1)
+    target_l1_dist = torch.cdist(labels,labels,p=1) 
+    labels_equal = target_l1_dist < cliff
+    mask = torch.logical_and(indices_not_equal, labels_equal)
+    return mask
+def get_anchor_negative_triplet_mask(labels, cliff):
+    #labels = torch.unsqueeze(labels, -1)
+    target_l1_dist = torch.cdist(labels,labels,p=1) 
+    labels_equal = target_l1_dist < cliff
+    mask = torch.logical_not(labels_equal)
+    return mask
+def ada_batch_hard_triplet_loss(embeddings, 
+                               predictions, 
+                               labels, 
+                               device, 
+                               cliff=0.5, 
+                               alpha=0.1, 
+                               squared=False):
+    '''
+    
+    '''
+    pairwise_distances = pairwise_distance(embeddings)
+    
+    mask_anchor_positive = get_anchor_positive_triplet_mask(labels,cliff).float()
+    anchor_positive_dist = torch.mul(mask_anchor_positive, pairwise_distances)
+    hardest_positive_dist,hardest_positive_indice = torch.max(anchor_positive_dist, dim=1, keepdims=True) 
+    
+    mask_anchor_negative = get_anchor_negative_triplet_mask(labels,cliff).float()
+    max_anchor_negative_dist = torch.max(pairwise_distances, 1, keepdims=True).values  
+    anchor_negative_dist = pairwise_distances + max_anchor_negative_dist * (1.0 - mask_anchor_negative) 
+    hardest_negative_dist,hardest_negative_indice = torch.min(anchor_negative_dist, dim=1, keepdims=True)
+    #labels = torch.unsqueeze(labels,-1)
+
+    label_dist = (labels - labels.T).abs()
+    
+    positive_label_dist = torch.zeros([len(hardest_negative_dist),1]).to(device)
+    negative_label_dist = torch.zeros([len(hardest_negative_dist),1]).to(device)
+    
+    #for i,label_indice in enumerate(hardest_positive_indice
