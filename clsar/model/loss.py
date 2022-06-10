@@ -227,9 +227,8 @@ def ada_batch_all_triplet_loss2(embeddings,
         reg_loss = torch.mean((labels-predictions).abs()**2)
     else:
         reg_loss = torch.mean((labels-predictions).abs())
-
+        
     union_loss = reg_loss + alpha*triplet_loss
-    
     return union_loss, triplet_loss, reg_loss, num_positive_triplets
 
 
@@ -257,13 +256,14 @@ def ada_batch_hard_triplet_loss(embeddings,
                                labels, 
                                device, 
                                cliff=0.5, 
-                               alpha=0.1, 
-                               squared=False):
+                               alpha=1.0, 
+                               squared=False,
+                               reg_mse = False
+                               ):
     '''
-    
+    batch hard triplet loss
     '''
     pairwise_distances = pairwise_distance(embeddings)
-    
     mask_anchor_positive = get_anchor_positive_triplet_mask(labels,cliff).float()
     anchor_positive_dist = torch.mul(mask_anchor_positive, pairwise_distances)
     hardest_positive_dist,hardest_positive_indice = torch.max(anchor_positive_dist, dim=1, keepdims=True) 
@@ -279,4 +279,26 @@ def ada_batch_hard_triplet_loss(embeddings,
     positive_label_dist = torch.zeros([len(hardest_negative_dist),1]).to(device)
     negative_label_dist = torch.zeros([len(hardest_negative_dist),1]).to(device)
     
-    #for i,label_indice in enumerate(hardest_positive_indice
+    for i,label_indice in enumerate(hardest_positive_indice):
+        positive_label_dist[i][0] = label_dist[i][int(hardest_positive_indice[0])]
+    for i,label_indice in enumerate(hardest_negative_indice):
+        negative_label_dist[i][0] = label_dist[i][int(hardest_negative_indice[0])]
+
+    margin = positive_label_dist - negative_label_dist
+    
+    triplet_loss = hardest_positive_dist - hardest_negative_dist + margin
+    triplet_loss = torch.maximum(triplet_loss, torch.tensor([0.0]).to(device))
+    
+    valid_triplets = (triplet_loss> 1e-16).float()
+    num_positive_triplets = torch.sum(valid_triplets)
+    
+    triplet_loss = torch.sum(triplet_loss*valid_triplets) / (num_positive_triplets + 1e-16)
+
+    if reg_mse:
+        reg_loss = torch.mean((labels-predictions).abs()**2)
+    else:
+        reg_loss = torch.mean((labels-predictions).abs())
+        
+    union_loss = reg_loss + alpha*triplet_loss
+    return union_loss, triplet_loss, reg_loss, num_positive_triplets
+

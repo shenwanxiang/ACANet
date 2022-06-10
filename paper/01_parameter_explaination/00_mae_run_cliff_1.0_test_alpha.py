@@ -106,7 +106,7 @@ Dataset =  LSSNS # MoleculeNet
 epochs = 1000
 batch_size = 128
 
-n_repeats = 10
+n_repeats = 20
 n_folds = 5
 
 ## data HPs

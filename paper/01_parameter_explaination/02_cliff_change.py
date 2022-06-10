@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from rdkit import Chem
 from scipy.stats import pearsonr
-
+from tqdm import tqdm
 from torch_geometric.loader import DataLoader
 from torch_geometric.datasets import MoleculeNet
 from torch_geometric.nn.models import AttentiveFP
@@ -114,13 +114,14 @@ result_save_dir = './results/cliff_with_baseline/'
 if not os.path.exists(result_save_dir):
     os.makedirs(result_save_dir)
 
-epochs = 1000
+epochs = 900
 batch_size = 128
 
 ## data HPs
 cliffs = ['mae', 'mse']
-cls = list(np.arange(0, 4.0, 0.2).round(2))
+cls = list(np.arange(0, 3.2, 0.2).round(2))
 cliffs.extend(cls)
+cliffs.extend([4.0, 5.0])
 
 n_repeats = 10
 n_fold = 5
@@ -128,35 +129,37 @@ n_fold = 5
 pub_args = {'in_channels':115, 'hidden_channels':64, 'out_channels':1, 
             'edge_dim':10, 'num_layers':10, 'dropout_p':0.1, 'batch_norms':None}
 
-for dataset_name in list(Dataset.names.keys())[:1]:
+
+for dataset_name in list(Dataset.names.keys()):
     #dataset_name = 'eaat3'
     dataset = Dataset(root = './tmpignore/', name=dataset_name, pre_transform=Gen115AtomFeatures())
     y = dataset.data.y.cpu().numpy()
     idx = np.argsort(y,axis=0).reshape(-1,) #sort data by ther value
-
     allres = []
-    for cliff in cliffs:
-        # n-fold cross-validation
-        if type(cliff) == str:
-            if cliff == 'mse':
-                reg_mse = True
-                cliff_use = 1e10
+    for j in tqdm(range(n_repeats), 
+                  desc = '%s_repeat' % dataset_name, 
+                  ascii=True):
+        for cliff in cliffs:
+            # n-fold cross-validation
+            if type(cliff) == str:
+                if cliff == 'mse':
+                    reg_mse = True
+                    cliff_use = 1e10
+                else:
+                    reg_mse = False
+                    cliff_use = 1e10
+                alpha = 0.0
+
             else:
+                alpha = 1.0
                 reg_mse = False
-                cliff_use = 1e10
-            alpha = 0.0
-            
-        else:
-            alpha = 1.0
-            reg_mse = False
-            cliff_use = cliff
-            
-        for j in range(n_repeats):
+                cliff_use = cliff
+
             for i in range(n_fold):
                 ts = pd.Series(idx)
                 ts_idx = ts.iloc[i::n_fold].tolist()
                 tr_idx = ts[~ts.isin(ts_idx)].tolist()
-                print(len(tr_idx), len(ts_idx))
+                print('dataset:%s, repeat:%s, cliff:%s, fold:%s' % (dataset_name, j+1,  cliff, i+1))
 
                 train_dataset = dataset.index_select(tr_idx)
                 val_dataset = dataset.index_select(ts_idx)
@@ -170,15 +173,14 @@ for dataset_name in list(Dataset.names.keys())[:1]:
                 optimizer = torch.optim.Adam(model.parameters(), lr=10**-3.5,
                                              weight_decay=10**-5)
                 history = []
-
-                for epoch in range(1, epochs):
+                for epoch in tqdm(range(epochs), desc = 'epoch', ascii=True):
                     train_loss, triplet_loss, mae_loss, n_triplets = train(model, train_loader, device, 
                                                                            cliff_use, alpha, reg_mse)
                     val_out = test(model, val_loader, device, cliff_use, alpha, reg_mse)
                     val_loss, val_triplet_loss, val_mae_loss, val_rmse, val_r2, val_n_triplets = val_out
 
-                    print(f'Epoch: {epoch:03d}, Loss: {train_loss:.4f} TripLoss: {triplet_loss:.4f} MAELoss: {mae_loss:.4f} '
-                          f'Triplets: {n_triplets:03d}; Val: {val_rmse:.4f}')
+                    # print(f'Epoch: {epoch:03d}, Loss: {train_loss:.4f} TripLoss: {triplet_loss:.4f} MAELoss: {mae_loss:.4f} '
+                    #       f'Triplets: {n_triplets:03d}; Val: {val_rmse:.4f}')
 
                     history.append({'Epoch':epoch, 'train_loss':train_loss, 'train_triplet_loss':triplet_loss,
                                     'train_mae_loss':mae_loss, 'train_triplets': n_triplets,
@@ -188,9 +190,9 @@ for dataset_name in list(Dataset.names.keys())[:1]:
 
                 df1 = pd.DataFrame(history)
                 df1['fold'] = 'fold_%s' % (i+1)
-                df1['repeat'] = 'fold_%s' % (j+1)
+                df1['repeat'] = 'repeat_%s' % (j+1)
                 df1['cliff'] = [cliff for i in range(len(df1))]
-                #df1['alpha'] = [alpha for i in range(len(df1))]
+                df1['alpha'] = [alpha for i in range(len(df1))]
                 #df1['batch_size'] = [batch_size for i in range(len(df1))]
                 #df1['model_paras'] = [pub_args for i in range(len(df1))]
                 df1['dataset'] = dataset_name
