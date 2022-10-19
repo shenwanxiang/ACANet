@@ -17,10 +17,10 @@ from torch.nn import Sequential, Linear, ModuleList, ReLU
 from torch_geometric.nn import MessagePassing, JumpingKnowledge
 from torch_geometric.nn import NNConv, GATv2Conv, PNAConv, SAGEConv, GINEConv, MLP 
 from torch_geometric.nn import global_mean_pool, global_max_pool, Set2Set, GlobalAttention
+from torch_geometric.utils import degree
 
 
-
-class ACNet_Base(torch.nn.Module):
+class ACANet_Base(torch.nn.Module):
 
     r"""An base class for implementing activlity cliff graph neural networks (ACNets) 
     Args:
@@ -74,7 +74,7 @@ class ACNet_Base(torch.nn.Module):
 
         self.jk = JumpingKnowledge(self.jk_mode, hidden_channels, num_layers)
         self.lin = Linear(num_layers * hidden_channels, self.out_channels)
-        
+      
         model_args = {'in_channels':self.in_channels, 
                 'hidden_channels':self.hidden_channels, 
                 'out_channels':self.out_channels,
@@ -86,8 +86,10 @@ class ACNet_Base(torch.nn.Module):
                }
         for k, v in kwargs.items():
             model_args[k] = v
+            setattr(self, k, v)   
+            
         self.model_args = model_args
-        
+
 
 
     def reset_parameters(self):
@@ -132,7 +134,7 @@ class ACNet_Base(torch.nn.Module):
     
     
     
-class ACNet_GCN(ACNet_Base):
+class ACANet_GCN(ACANet_Base):
     r"""The continuous kernel-based convolutional operator from the
     `"Neural Message Passing for Quantum Chemistry"
     <https://arxiv.org/abs/1704.01212>`_ paper, using the
@@ -158,7 +160,7 @@ class ACNet_GCN(ACNet_Base):
         return NNConv(in_channels, out_channels, nn = edge_fuc, **kwargs)
 
     
-class ACNet_GIN(ACNet_Base):
+class ACANet_GIN(ACANet_Base):
 
     r"""The modified :class:`GINConv` operator from the `"Strategies for
     Pre-training Graph Neural Networks" <https://arxiv.org/abs/1905.12265>`_
@@ -184,7 +186,7 @@ class ACNet_GIN(ACNet_Base):
     
     
     
-class ACNet_GAT(ACNet_Base):
+class ACANet_GAT(ACANet_Base):
     r"""The Graph Neural Network from `"Graph Attention Networks"
     <https://arxiv.org/abs/1710.10903>`_ or `"How Attentive are Graph Attention
     Networks?" <https://arxiv.org/abs/2105.14491>`_ papers, using the
@@ -210,7 +212,7 @@ class ACNet_GAT(ACNet_Base):
     
     
     
-class ACNet_PNA(ACNet_Base):
+class ACANet_PNA(ACANet_Base):
     r"""The Graph Neural Network from the `"Principal Neighbourhood Aggregation
     for Graph Nets" <https://arxiv.org/abs/2004.05718>`_ paper, using the
     :class:`~torch_geometric.nn.conv.PNAConv` operator for message passing.
@@ -223,14 +225,32 @@ class ACNet_PNA(ACNet_Base):
         num_layers (int, optional): Number of message passing layers. (default: :int:2)
         dropout_p (float, optional): Dropout probability. (default: :obj:`0.1`) of ACNet, different from dropout in GATConv layer
         batch_norms (torch.nn.Module, optional, say torch.nn.BatchNorm1d): The normalization operator to use. (default: :obj:`None`)
-        global_pool: (torch_geometric.nn.Module, optional): the global-pooling-layer. (default: :obj: torch_geometric.nn.global_mean_pool)
+        global_pool(torch_geometric.nn.Module, optional): the global-pooling-layer. (default: :obj: torch_geometric.nn.global_mean_pool)
+        aggregators(list of str): Set of aggregation function identifiers, e.g., ['mean', 'min', 'max', 'sum']
+        scalers(list of str): Set of scaling function identifiers, e.g., ['identity', 'amplification', 'attenuation'] 
+        deg (Tensor): Histogram of in-degrees of nodes in the training set, used by scalers to normalize, e.g.,  torch.tensor([1, 2, 3]
         **kwargs (optional): Additional arguments of the underlying:class:`torch_geometric.nn.conv.MessagePassing` layers.
     """
-    
+
     def init_conv(self, in_channels, out_channels, edge_dim, **kwargs): 
         return PNAConv(in_channels, out_channels, edge_dim = edge_dim,  **kwargs)
-    
+
+                
+
+def get_deg(train_dataset):
+    # Compute the maximum in-degree in the training data.
+    max_degree = -1
+    for data in train_dataset:
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        max_degree = max(max_degree, int(d.max()))
+
+    # Compute the in-degree histogram tensor
+    deg = torch.zeros(max_degree + 1, dtype=torch.long)
+    for data in train_dataset:
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    return deg
 
 
 
-__all__ = ['ACNet_GCN', 'ACNet_GIN', 'ACNet_GAT', 'ACNet_PNA']
+__all__ = ['ACANet_GCN', 'ACANet_GIN', 'ACANet_GAT', 'ACANet_PNA']
