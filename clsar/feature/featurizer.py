@@ -122,7 +122,13 @@ class GenAttentiveFeatures(object):
         for atom in mol.GetAtoms():
             symbol = [0.] * len(self.symbols)
             symbol[self.symbols.index(atom.GetSymbol())] = 1.
+            
             degree = [0.] * 6
+            if atom.GetDegree() >= 6:
+                degree[5] = 1.
+            else:
+                degree[atom.GetDegree()] = 1.
+            
             degree[atom.GetDegree()] = 1.
             formal_charge = atom.GetFormalCharge()
             radical_electrons = atom.GetNumRadicalElectrons()
