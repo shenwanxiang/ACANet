@@ -21,6 +21,7 @@ class Gen115AtomFeatures(object):
     F.atom_inherent_feature:24       
     '''
 
+    in_channels = 115
     
     def __init__(self):
         
@@ -88,6 +89,9 @@ class GenAttentiveFeatures(object):
     '''
     AttentiveFP 39 node features generation
     '''
+    
+    in_channels = 39
+    
     def __init__(self):
         self.symbols = [
             'B', 'C', 'N', 'O', 'F', 'Si', 'P', 'S', 'Cl', 'As', 'Se', 'Br',
