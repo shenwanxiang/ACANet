@@ -11,6 +11,7 @@ from torch import Tensor
 import torch.nn as nn
 from torch.nn.modules.loss import _Loss
 import numpy as np
+import pandas as pd
 
 class ACALoss(_Loss):
     r"""Creates a criterion that measures the activity cliff awareness (ACA) loss given an input
@@ -259,6 +260,6 @@ def get_best_cliff_exp(labels, cliffs = list(np.arange(0.1, 3.2, 0.1).round(2)))
     s1_best = _best.loc[1].iloc[0].to_dict()
     s2_best = _best.loc[2].iloc[0].to_dict()
     
-    return s1_best, s1_best, df
+    return s1_best, s2_best, df
 
 
