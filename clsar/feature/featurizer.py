@@ -121,20 +121,27 @@ class GenAttentiveFeatures(object):
         xs = []
         for atom in mol.GetAtoms():
             symbol = [0.] * len(self.symbols)
-            symbol[self.symbols.index(atom.GetSymbol())] = 1.
-            
+            if atom.GetSymbol() in self.symbols:
+                symbol[self.symbols.index(atom.GetSymbol())] = 1.
+            else:
+                symbol[self.symbols.index('other')] = 1.
+                
             degree = [0.] * 6
             if atom.GetDegree() >= 6:
                 degree[5] = 1.
             else:
                 degree[atom.GetDegree()] = 1.
-            
-            degree[atom.GetDegree()] = 1.
+
             formal_charge = atom.GetFormalCharge()
             radical_electrons = atom.GetNumRadicalElectrons()
+            
             hybridization = [0.] * len(self.hybridizations)
-            hybridization[self.hybridizations.index(
-                atom.GetHybridization())] = 1.
+            hbdz = atom.GetHybridization()
+            if hbdz in self.hybridizations:
+                hybridization[self.hybridizations.index(hbdz)] = 1.
+            else:
+                hybridization[self.hybridizations.index('other')] = 1.
+
             aromaticity = 1. if atom.GetIsAromatic() else 0.
             hydrogens = [0.] * 5
             hydrogens[atom.GetTotalNumHs()] = 1.
