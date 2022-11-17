@@ -158,14 +158,16 @@ def _aca_loss(labels,
        union loss of a batch (mae loss and triplet loss with soft margin)
        -------------------------------
        Args:
-          labels:     shape = （batch_size,）
-          predictions:   shape = （batch_size,） 
-          embeddings: 提取的特征向量， shape = (batch_size, vector_size)
-          
+          labels: shape = （batch_size,）
+          predictions: shape = （batch_size,） 
+          embeddings: shape = (batch_size, embedding_vector_size)
+          alpha (float, optional): awareness factor. Default: :math:`1.0`.
+          cliff_lower (float, optional): The threshold for mining the postive samples. Default: ``1.0``
+          cliff_upper (float, optional): The threshold for mining the negative samples. Default: ``1.0``
+          squared (bool, optional): if True, the mse loss will be used, otherwise mae. The L(tsm) will also be squared.
        Returns:
-         union_loss: scalar, 一个batch的损失值
+         loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets
     '''
-
 
     device = embeddings.device
     
