@@ -42,19 +42,17 @@ class LSSNS(InMemoryDataset):
 
     # Format: name: [display_name, url_name, csv_name, smiles_idx, y_idx]
 
-    names = {'ur2': ['UR2', 'UR2.csv', 'UR2', 7, 12],
+    names = {'ido1':['IDO1', 'IDO1.csv', 'IDO1', 7, 12],
              'plk1': ['PLK1', 'PLK1.csv', 'PLK1', 7, 12],
              'rip2': ['RIP2', 'RIP2.csv', 'RIP2', 7, 12],
-             'rorg': ['RORg', 'RORg.csv', 'RORg', 7, 12],
              'klk5': ['KLK5', 'KLK5.csv', 'KLK5', 7, 12],
              'braf': ['BRAF', 'BRAF.csv', 'BRAF', 7, 12],
              'usp7': ['USP7', 'USP7.csv', 'USP7', 7, 12],
              'phgdh': ['PHGDH', 'PHGDH.csv', 'PHGDH', 7, 12],
              'notum': ['Notum', 'Notum.csv', 'Notum', 7, 12],
              'rxfp1': ['RXFP1', 'RXFP1.csv', 'RXFP1', 7, 12],
-             'mglur2': ['mGluR2', 'mGluR2.csv', 'mGluR2', 7, 12],
-             'pkci': ['PKCi', 'PKCi.csv', 'PKCi', 3, 8],
-             'eaat3': ['EAAT3', 'EAAT3.csv', 'EAAT3', 7, 12]}
+             'mglur2': ['mGluR2', 'mGluR2.csv', 'mGluR2', 7, 12]
+            }
 
     def __init__(self, root, name, transform=None, pre_transform=None, pre_filter=None):
         self.name = name.lower()
