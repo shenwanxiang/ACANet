@@ -69,30 +69,23 @@ class ACALoss(_Loss):
                  alpha: float = 1.0, 
                  cliff_lower: float = 1.0, 
                  cliff_upper: float = 1.0,
-                 squared: bool = False):
+                 squared: bool = False, 
+                 debug_mode = True
+                ):
         
         super(ACALoss, self).__init__(alpha)
         self.alpha = alpha
         self.cliff_lower = cliff_lower
         self.cliff_upper = cliff_upper
         self.squared = squared
-
+        self.debug_mode = debug_mode
+        
     def forward(self, labels: Tensor, predictions: Tensor, embeddings: Tensor) -> Tensor:
 
         return _aca_loss(labels, predictions, embeddings, alpha=self.alpha, 
                         cliff_lower=self.cliff_lower, cliff_upper=self.cliff_upper,
-                        squared=self.squared)
+                        squared=self.squared, debug_mode = self.debug_mode)
     
-
-        
-        
-
-def cudafy(module):
-    if torch.cuda.is_available():
-        return module.cuda()
-    else:
-        return module.cpu()
-
 
 def pairwise_distance(embeddings, squared=True):
     pairwise_distances_squared = torch.sum(embeddings ** 2, dim=1, keepdim=True) + \
@@ -106,10 +99,12 @@ def pairwise_distance(embeddings, squared=True):
         pairwise_distances = pairwise_distances_squared.clamp(min=1e-16).sqrt()
 
     pairwise_distances = torch.mul(pairwise_distances, ~error_mask)
-
+    
+    device = embeddings.device
+    
     num_data = embeddings.shape[0]
     # Explicitly set diagonals to zero.
-    mask_offdiagonals = torch.ones_like(pairwise_distances) - torch.diag(cudafy(torch.ones([num_data])))
+    mask_offdiagonals = torch.ones_like(pairwise_distances) - torch.diag(torch.ones([num_data]).to(device))
     #mask_offdiagonals = torch.ones_like(pairwise_distances) - torch.diag(torch.ones([num_data]))
     pairwise_distances = torch.mul(pairwise_distances, mask_offdiagonals)
 
@@ -152,7 +147,8 @@ def _aca_loss(labels,
               alpha=1.0,
               cliff_lower=0.2,
               cliff_upper=1.0,
-              squared = False
+              squared = False,
+              debug_mode = True
               ):
     '''
        union loss of a batch (mae loss and triplet loss with soft margin)
@@ -209,8 +205,11 @@ def _aca_loss(labels,
     
     loss = reg_loss + alpha*tsm_loss
     
-    return loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets
-
+    if debug_mode:
+        return loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets
+    else:
+        return loss
+    
 
 
 def get_best_cliff(labels, cliffs = list(np.arange(0.1, 3.2, 0.1).round(2))):
