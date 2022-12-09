@@ -22,6 +22,7 @@ class Gen115AtomFeatures(object):
     '''
 
     in_channels = 115
+    edge_dim = 10
     
     def __init__(self):
         
@@ -91,6 +92,7 @@ class GenAttentiveFeatures(object):
     '''
     
     in_channels = 39
+    edge_dim = 10
     
     def __init__(self):
         self.symbols = [
