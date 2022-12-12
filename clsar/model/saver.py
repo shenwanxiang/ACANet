@@ -7,7 +7,7 @@ Created on Wed Jun  8 10:46:59 2022
 
 import torch
 import os
-
+from copy import deepcopy
 
 class SaveBestModel:
     """
@@ -35,13 +35,18 @@ class SaveBestModel:
         epoch, model, optimizer):
         if current_valid_loss < self.best_valid_loss:
             self.best_valid_loss = current_valid_loss
-            # print(f"\nBest validation loss: {self.best_valid_loss}")
-            # print(f"\nSaving best model for epoch: {epoch+1}\n")
-            self.inMemorySave.update({'epoch': epoch+1, 'model_args':model.model_args,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict()})
-            
+            #print(f"\nBest validation loss: {self.best_valid_loss}")
+            #print(f"\nSaving best model for epoch: {epoch+1}\n")
+            smodel = deepcopy(model) #should be deepcopy
+            self.inMemorySave.update({'epoch': epoch+1,
+                                     'model_args': smodel.model_args,
+                                     'model_state_dict':smodel.state_dict(),
+                                     'optimizer_state_dict':optimizer.state_dict()
+                                     })
 
+            
+            
+            
     def save(self):
         print("Saving final model...")
         print(f"\nBest validation loss: {self.best_valid_loss}")
