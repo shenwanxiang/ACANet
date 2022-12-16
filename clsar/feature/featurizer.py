@@ -1,9 +1,20 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Dec 16 16:14:54 2022
+
+@author: Wanxiang.shen
+
+
+"""
+
 import pandas as pd
+import numpy as np
 import torch
 import torch.nn.functional as F
 from rdkit import Chem
 
 from .atomfeat import AtomFeaturizer
+from .ecfp import bitpaths2AtomBondIdx, mol2fpbitInfo, highlight, showAtomIdx
 
 
 class Gen115AtomFeatures(object):
@@ -23,6 +34,7 @@ class Gen115AtomFeatures(object):
 
     in_channels = 115
     edge_dim = 10
+    name = 'AT115'
     
     def __init__(self):
         
@@ -93,6 +105,7 @@ class GenAttentiveFeatures(object):
     
     in_channels = 39
     edge_dim = 10
+    name = 'AT39'
     
     def __init__(self):
         self.symbols = [
@@ -187,5 +200,54 @@ class GenAttentiveFeatures(object):
         else:
             data.edge_index = torch.tensor(edge_indices).t().contiguous()
             data.edge_attr = torch.stack(edge_attrs, dim=0)
+
+        return data
+    
+    
+    
+
+class GenECFPFeatures(object):
+    
+    '''
+    ECFP atom and bond feature
+    '''
+
+    def __init__(self, radius = 2, nBits = 1024):
+        
+        self.radius = radius
+        self.nBits = nBits
+        self.name = 'ECFP'
+        self.in_channels = self.nBits
+        self.edge_dim = self.nBits
+    
+    def __call__(self, data):
+        
+        # Generate the 1024 bit features.
+        mol = Chem.MolFromSmiles(data.smiles)
+        fp, bitInfo = mol2fpbitInfo(mol, 
+                                    radius=self.radius, 
+                                    nBits=self.nBits)
+
+        OnbitIdx = list(bitInfo.keys())
+        atom_fp_arr = np.zeros((mol.GetNumAtoms(), self.nBits))
+        bond_fp_arr = np.zeros((mol.GetNumBonds(), self.nBits))
+
+
+        for idx in OnbitIdx:
+            bitpaths = bitInfo[idx]
+            atomsToUse, bondsToUse = bitpaths2AtomBondIdx(mol, bitpaths)
+            #highlight(mol, atomsToUse, bondsToUse)
+            atom_fp_arr[atomsToUse, idx] = 1.
+            bond_fp_arr[bondsToUse, idx] = 1.
+    
+        data.x = torch.tensor(atom_fp_arr, dtype=torch.float) 
+        edge_attr = np.repeat(bond_fp_arr, repeats=2, axis=0)
+        data.edge_attr = torch.tensor(edge_attr,  dtype=torch.float) 
+        
+        edge_indices = []
+        for bond in mol.GetBonds():
+            edge_indices += [[bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()]]
+            edge_indices += [[bond.GetEndAtomIdx(), bond.GetBeginAtomIdx()]]
+        data.edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
 
         return data

@@ -1,1 +1,1 @@
-from .featurizer import Gen115AtomFeatures, GenAttentiveFeatures
+from .featurizer import Gen115AtomFeatures, GenAttentiveFeatures, GenECFPFeatures
