@@ -12,6 +12,7 @@ import torch.nn as nn
 from torch.nn.modules.loss import _Loss
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 class ACALoss(_Loss):
     r"""Creates a criterion that measures the activity cliff awareness (ACA) loss given an input
@@ -49,13 +50,17 @@ class ACALoss(_Loss):
         cliff_lower (float, optional): The threshold for mining the postive samples. Default: ``1.0``
         cliff_upper (float, optional): The threshold for mining the negative samples. Default: ``1.0``
         squared (bool, optional): if True, the mse loss will be used, otherwise mae. The L(tsm) will also be squared.
-
+        dev_mode (bool, optional): if False, only return the union loss
     Examples::
-
-    >>> aca_loss = ACALoss(alpha=1.0, cliff_lower = 0.2, cliff_upper = 1.0)
+    ## developer mode
+    >>> aca_loss = ACALoss(alpha=1.0, cliff_lower = 0.2, cliff_upper = 1.0, squared = True, dev_mode = True)
     >>> loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets = aca_loss(labels, predictions, embeddings)
     >>> loss.backward()
-
+    ## normal mode
+    >>> aca_loss = ACALoss(dev_mode = False)
+    >>> loss = aca_loss(labels, predictions, embeddings)
+    >>> loss.backward()
+    
     """
     
     __constants__ = ['alpha', 'cliff_lower', 'cliff_upper', 'squared']
@@ -63,14 +68,14 @@ class ACALoss(_Loss):
     cliff_lower: float
     cliff_upper: float
     squared: bool
-    
+    dev_mode: bool
 
     def __init__(self, 
                  alpha: float = 1.0, 
                  cliff_lower: float = 1.0, 
                  cliff_upper: float = 1.0,
                  squared: bool = False, 
-                 debug_mode = True
+                 dev_mode = True
                 ):
         
         super(ACALoss, self).__init__(alpha)
@@ -78,37 +83,20 @@ class ACALoss(_Loss):
         self.cliff_lower = cliff_lower
         self.cliff_upper = cliff_upper
         self.squared = squared
-        self.debug_mode = debug_mode
+        self.dev_mode = dev_mode
         
     def forward(self, labels: Tensor, predictions: Tensor, embeddings: Tensor) -> Tensor:
 
         return _aca_loss(labels, predictions, embeddings, alpha=self.alpha, 
                         cliff_lower=self.cliff_lower, cliff_upper=self.cliff_upper,
-                        squared=self.squared, debug_mode = self.debug_mode)
+                        squared=self.squared, dev_mode = self.dev_mode)
     
 
 def pairwise_distance(embeddings, squared=True):
-    pairwise_distances_squared = torch.sum(embeddings ** 2, dim=1, keepdim=True) + \
-                                 torch.sum(embeddings.t() ** 2, dim=0, keepdim=True) - \
-                                 2.0 * torch.matmul(embeddings, embeddings.t())
-
-    error_mask = pairwise_distances_squared <= 0.0
+    pdist = torch.cdist(embeddings, embeddings, p = 1)
     if squared:
-        pairwise_distances = pairwise_distances_squared.clamp(min=0)
-    else:
-        pairwise_distances = pairwise_distances_squared.clamp(min=1e-16).sqrt()
-
-    pairwise_distances = torch.mul(pairwise_distances, ~error_mask)
-    
-    device = embeddings.device
-    
-    num_data = embeddings.shape[0]
-    # Explicitly set diagonals to zero.
-    mask_offdiagonals = torch.ones_like(pairwise_distances) - torch.diag(torch.ones([num_data]).to(device))
-    #mask_offdiagonals = torch.ones_like(pairwise_distances) - torch.diag(torch.ones([num_data]))
-    pairwise_distances = torch.mul(pairwise_distances, mask_offdiagonals)
-
-    return pairwise_distances
+        pdist = pdist**2
+    return pdist
 
 
     
@@ -148,7 +136,7 @@ def _aca_loss(labels,
               cliff_lower=0.2,
               cliff_upper=1.0,
               squared = False,
-              debug_mode = True
+              dev_mode = True
               ):
     '''
        union loss of a batch (mae loss and triplet loss with soft margin)
@@ -165,6 +153,11 @@ def _aca_loss(labels,
          loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets
     '''
 
+    if squared:
+        reg_loss = torch.mean((labels-predictions).abs()**2)
+    else:
+        reg_loss = torch.mean((labels-predictions).abs())
+
     device = embeddings.device
     
     # label pairwise distance for soft margin
@@ -172,7 +165,8 @@ def _aca_loss(labels,
     margin_pos = labels_dist.unsqueeze(2)
     margin_neg = labels_dist.unsqueeze(1)
     margin = margin_neg - margin_pos
-
+    #margin = torch.maximum(margin, torch.tensor([0.0]).to(device))
+    
     # embedding pairwise distance for (a, p, n) mining
     pairwise_dis = pairwise_distance(embeddings=embeddings, squared=squared)
     anchor_positive_dist = pairwise_dis.unsqueeze(2)
@@ -196,25 +190,23 @@ def _aca_loss(labels,
     pos_triplets = (triplet_loss > 1e-16).float()
     n_pos_triplets = torch.sum(pos_triplets)  # torch.where
 
-    if squared:
-        reg_loss = torch.mean((labels-predictions).abs()**2)
-    else:
-        reg_loss = torch.mean((labels-predictions).abs())
-        
     tsm_loss = torch.sum(triplet_loss) / (n_mined_triplets + 1e-16)
-    
     loss = reg_loss + alpha*tsm_loss
+
     
-    if debug_mode:
+    if dev_mode:
         return loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets
     else:
         return loss
     
 
+    
+    
+    
 
 def get_best_cliff(labels, cliffs = list(np.arange(0.1, 3.2, 0.1).round(2))):
     '''
-    Get the best cliff lower and upper values. Under these value, we can mine the maximal triplets.
+    Get the best cliff lower and upper values. Under these value, we can mine the maximal No. of triplets.
     '''
 
     low_up_trps = []
@@ -234,6 +226,27 @@ def get_best_cliff(labels, cliffs = list(np.arange(0.1, 3.2, 0.1).round(2))):
                     best_upper = upper
 
     return best_lower, best_upper, n
+
+
+def get_best_cliff_batch(train_dataset, 
+                         device,
+                         batch_size=128, 
+                         epochs = 10, 
+                         cliffs = list(np.arange(0.1, 3.2, 0.1).round(2))):
+    
+    from torch_geometric.loader import DataLoader
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    print('Find the potential cliff parameters automatically...')
+    c = []
+    for epoch in tqdm(range(epochs), desc = 'epoch', ascii=True):
+        for data in train_loader:
+            cl, cu, _ = get_best_cliff(data.y.to(device), cliffs = cliffs)
+            c.append([cl, cu, epoch])
+    c_distribution = pd.DataFrame(c).groupby(0).size()/len(c)
+    best_cliff = c_distribution.idxmax()
+    return best_cliff
 
 
 
@@ -262,5 +275,3 @@ def get_best_cliff_exp(labels, cliffs = list(np.arange(0.1, 3.2, 0.1).round(2)))
     s2_best = _best.loc[2].iloc[0].to_dict()
     
     return s1_best, s2_best, df
-
-

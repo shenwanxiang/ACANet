@@ -249,7 +249,7 @@ class HSSMS(LSSNS):
             value, indicating whether the data object should be included in the
             final dataset. (default: :obj:`None`)
     """
-    url = 'https://bidd-group.github.io/MPCD/dataset/dataset/HSSMS/MoleculeACE_benchmark/{}'
+    url = 'https://bidd-group.github.io/MPCD/dataset/HSSMS/MoleculeACE_benchmark/{}'
     meta = 'https://bidd-group.github.io/MPCD/dataset/HSSMS/MoleculeACE_benchmark/metadata/datasets.csv'
 
     meta_table = pd.read_csv(meta)
