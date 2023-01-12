@@ -43,7 +43,7 @@ class ACANet_Base(torch.nn.Module):
         in_channels (int): Size of each input sample.
         out_channels (int): Size of each out sample.
         edge_dim (int): Edge feature dimensionality.
-        convs_layers: Message passing layers. (default: :[64, 512, 1024])
+        convs_layers: Message passing layers. (default: :[64]*16)
         dense_layers: Fully-connected layers. (default: :[512, 128, 32])
         pool_layer: (torch_geometric.nn.Module, optional): the pooling-layer. (default: :obj: torch_geometric.nn.global_max_pool) 
         batch_norms (torch.nn.Module, optional, say torch.nn.BatchNorm1d): The normalization operator to use. (default: :obj:`None`)
@@ -56,11 +56,12 @@ class ACANet_Base(torch.nn.Module):
                  in_channels, 
                  out_channels, 
                  edge_dim,
-                 convs_layers = [64, 512, 1024],  
+                 convs_layers = [64]*16,  
                  dense_layers = [512, 128, 32], #
                  pooling_layer = global_max_pool,
                  batch_norms = torch.nn.BatchNorm1d,
                  dropout_p = 0.0,
+                 jk_layer = True,
                  **kwargs,
                 ):
         super().__init__()
@@ -75,7 +76,8 @@ class ACANet_Base(torch.nn.Module):
         self.pooling_layer = pooling_layer
         self.dense_layers = dense_layers
         self._batch_norms = batch_norms
-
+        self.jk_layer = jk_layer
+        
         ## convs stack 
         _convs_layers = [in_channels]
         _convs_layers.extend(convs_layers)
@@ -84,6 +86,9 @@ class ACANet_Base(torch.nn.Module):
         for i in range(len(_convs_layers)-1):
             convs = self.init_conv(_convs_layers[i], _convs_layers[i+1], edge_dim, **kwargs)
             self.convs.append(convs)
+        
+        ## jumping layer
+        self.jk = JumpingKnowledge('cat')
 
         # norm stack
         self.batch_norms = None
@@ -91,9 +96,12 @@ class ACANet_Base(torch.nn.Module):
             self.batch_norms = ModuleList()
             for i in range(len(_convs_layers)-1):
                 self.batch_norms.append(deepcopy(batch_norms(_convs_layers[i+1])))
-
-
-        _dense_layers = [_convs_layers[-1]]
+        
+        # dense layers
+        if self.jk_layer:
+            _dense_layers = [sum(_convs_layers[1:])]
+        else:
+            _dense_layers = [_convs_layers[-1]]
         _dense_layers.extend(dense_layers)
         self._dense_layers = _dense_layers
         
@@ -115,6 +123,7 @@ class ACANet_Base(torch.nn.Module):
                 'batch_norms':self._batch_norms,
                 'pooling_layer':self.pooling_layer,
                 'dense_layers':self.dense_layers,
+                'jk_layer':self.jk_layer,
                }
         for k, v in kwargs.items():
             model_args[k] = v
@@ -132,7 +141,8 @@ class ACANet_Base(torch.nn.Module):
             norm.reset_parameters()
         if hasattr(self, 'out'):
             self.out.reset_parameters()          
-  
+        if hasattr(self, 'jk'):
+            self.out.reset_parameters()      
         
     def init_conv(self, in_channels, out_channels,  **kwargs):
         raise NotImplementedError
@@ -145,13 +155,17 @@ class ACANet_Base(torch.nn.Module):
         
         x = F.dropout(x, p=self.dropout_p, training = self.training)
         # conv-act-norm-drop layer
+        xs = []  
         for i, convs in enumerate(self.convs):
             x = convs(x, edge_index, edge_attr, *args, **kwargs)        
             x = F.relu(x, inplace=True)
             if self.batch_norms is not None:
                 x = self.batch_norms[i](x)
             x = F.dropout(x, p=self.dropout_p, training=self.training)
-        
+            xs.append(x)
+            
+        if self.jk_layer:
+            x = self.jk(xs) ## size of x: sum(convs_layers) [64]*16 = 1024
 
         # global pooling layer: pooling on the whole molecular structure
         embed = self.pooling_layer(x, batch)
@@ -285,7 +299,6 @@ def get_deg(train_dataset):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
     return deg
-
 
 
 

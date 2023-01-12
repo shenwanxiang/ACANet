@@ -18,6 +18,7 @@ from torch_geometric.nn import MessagePassing, JumpingKnowledge
 from torch_geometric.nn import NNConv, GATv2Conv, PNAConv, SAGEConv, GINEConv, MLP 
 from torch_geometric.nn import global_mean_pool, global_max_pool, Set2Set, GlobalAttention
 from torch_geometric.utils import degree
+import copy
 
 
 class ACANet_Base(torch.nn.Module):
@@ -44,7 +45,7 @@ class ACANet_Base(torch.nn.Module):
                  num_layers = 2,
                  dropout_p = 0.1,
                  batch_norms = None,
-                 global_pool = global_mean_pool,
+                 global_pool = global_max_pool, #global_max_pool
                  **kwargs,
                 ):
         super().__init__()
