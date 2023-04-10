@@ -17,8 +17,12 @@ This study proposes the activity-cliff-awareness (ACA) loss for improving molecu
 
 ACA loss vs. MAE loss on external test set and on No. of mined triplets during the training:
 
-![aca-mae](./doc/image/TestRMSE.png)
-![aca-mae-triplets](./doc/image/MinedTriplets.png)
+<p align="left" width="100%">
+    <img width="25%" src="./doc/image/TestRMSE.png">
+    <img width="25%" src="./doc/image/MinedTriplets.png">
+
+</p>
+
 
 
 
