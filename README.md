@@ -16,19 +16,17 @@ This study proposes the activity-cliff-awareness (ACA) loss for improving molecu
 ## Performance
 
 ACA loss vs. MAE loss on external test set and on No. of mined triplets during the training:
-
 <p align="left" width="100%">
     <img width="40%" src="./doc/image/TestRMSE.png">
     <img width="40%" src="./doc/image/MinedTriplets.png">
-
 </p>
+More details on usage and performance can be found [here](xx).
 
 
-## ACA loss 
+## ACA loss implementation
 
-* [pytorch](./doc/image/MinedTriplets.png)
-* tensorflow
-
+* [Pytorch](https://github.com/bidd-group/bidd-clsar/blob/main/clsar/model/loss.py)
+* [Tensorflow](https://github.com/bidd-group/bidd-clsar/blob/main/clsar/model/loss_tf.py)
 
 
 ## Installation
