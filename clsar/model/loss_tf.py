@@ -12,7 +12,6 @@ from tensorflow.keras import losses
 import numpy as np
 
 
-
 class ACALoss(losses.Loss):
     
     r"""Creates a criterion that measures the activity cliff awareness (ACA) loss given an input
@@ -46,14 +45,15 @@ class ACALoss(losses.Loss):
     
 
     Args:
-        alpha (float, optional): awareness factor. Default: :math:`0.001`.
+        alpha (float, optional): awareness factor. Default: :math:`0.1`.
         cliff_lower (float, optional): The threshold for mining the postive samples. Default: ``1.0``
         cliff_upper (float, optional): The threshold for mining the negative samples. Default: ``1.0``
         squared (bool, optional): if True, the mse loss will be used, otherwise mae. The L(tsm) will also be squared.
+        p (float, optional) – p value for the p-norm distance to calculate the distance of latent vectors ∈[0,∞]. Default: ``2.0``
         dev_mode (bool, optional): if False, only return the union loss
     Examples::
     ## developer mode
-    >>> aca_loss = ACALoss(alpha=1e-3, cliff_lower = 0.2, cliff_upper = 1.0, squared = True, dev_mode = True)
+    >>> aca_loss = ACALoss(alpha=1e-1, cliff_lower = 0.2, cliff_upper = 1.0, squared = True, p =1.0, dev_mode = True)
     >>> loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets = aca_loss(labels, predictions, embeddings)
     >>> loss.backward()
     ## normal mode
@@ -64,10 +64,11 @@ class ACALoss(losses.Loss):
     """
     
     def __init__(self, 
-                 alpha: float = 1e-3, 
+                 alpha: float = 1e-1, 
                  cliff_lower: float = 1.0, 
                  cliff_upper: float = 1.0,
                  squared: bool = False, 
+                 p: float = 2.0,
                  dev_mode = True,
                  **kwargs):
         super().__init__(**kwargs)
@@ -75,6 +76,7 @@ class ACALoss(losses.Loss):
         self.cliff_lower = cliff_lower
         self.cliff_upper = cliff_upper
         self.squared = squared
+        self.p = p
         self.dev_mode = dev_mode
         
     def call(self, labels, predictions, embeddings):
@@ -82,11 +84,16 @@ class ACALoss(losses.Loss):
         # return the loss tensor
         return _aca_loss(labels, predictions, embeddings, alpha=self.alpha, 
                         cliff_lower=self.cliff_lower, cliff_upper=self.cliff_upper,
-                        squared=self.squared, dev_mode = self.dev_mode)
+                        squared=self.squared, p = self.p, dev_mode = self.dev_mode)
 
 
-def pairwise_distance(embeddings, squared=True):
-    pdist = tf.norm(embeddings - embeddings[:, tf.newaxis], ord=1, axis=-1)
+def pairwise_distance(embeddings, squared=True, p = 1):
+    pdist = tf.norm(embeddings - embeddings[:, tf.newaxis], ord=p, axis=-1)
+    
+    ## normalized l1/l2 distance along the vector size
+    # N = np.power(embeddings.shape[1], 1/p)
+    # pdist = pdist / N
+
     if squared:
         pdist = pdist**2
     return pdist
@@ -116,10 +123,11 @@ def get_triplet_mask(labels, cliff_lower=0.2, cliff_upper=1.0):
 def _aca_loss(labels,
               predictions, 
               embeddings,
-              alpha=1e-3,
+              alpha=1e-1,
               cliff_lower=0.2,
               cliff_upper=1.0,
               squared = False,
+              p = 2.0,
               dev_mode = True
               ):
     if squared:
@@ -129,11 +137,11 @@ def _aca_loss(labels,
 
 
     # implement the rest of the ACA loss 
-    labels_dist = pairwise_distance(embeddings=labels, squared=squared)
+    labels_dist = pairwise_distance(embeddings=labels, squared=squared, p = p)
     margin_pos = tf.expand_dims(labels_dist, 2)
     margin_neg = tf.expand_dims(labels_dist, 1)
     margin = margin_neg - margin_pos
-    pairwise_dis = pairwise_distance(embeddings=embeddings, squared=squared)
+    pairwise_dis = pairwise_distance(embeddings=embeddings, squared=squared, p = p)
     anchor_positive_dist = tf.expand_dims(pairwise_dis, 2)
     assert anchor_positive_dist.shape[2] == 1, "{}".format(
         anchor_positive_dist.shape)

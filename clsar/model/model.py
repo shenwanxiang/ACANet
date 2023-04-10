@@ -22,6 +22,7 @@ from copy import deepcopy
 
 
 
+
 def _fix_reproducibility(seed=42):
     import os, random
     import numpy as np
@@ -43,7 +44,7 @@ class ACANet_Base(torch.nn.Module):
         in_channels (int): Size of each input sample.
         out_channels (int): Size of each out sample.
         edge_dim (int): Edge feature dimensionality.
-        convs_layers: Message passing layers. (default: :[64, 512, 1024])
+        convs_layers: Message passing layers. (default: :[64, 128, 256, 512])
         dense_layers: Fully-connected layers. (default: :[512, 128, 32])
         pool_layer: (torch_geometric.nn.Module, optional): the pooling-layer. (default: :obj: torch_geometric.nn.global_max_pool) 
         batch_norms (torch.nn.Module, optional, say torch.nn.BatchNorm1d): The normalization operator to use. (default: :obj:`None`)
@@ -56,8 +57,8 @@ class ACANet_Base(torch.nn.Module):
                  in_channels, 
                  out_channels, 
                  edge_dim,
-                 convs_layers = [64, 512, 1024],  
-                 dense_layers = [512, 128, 32], #
+                 convs_layers = [64, 128, 256, 512], #[64, 512, 1024],  
+                 dense_layers = [256, 128, 32], #
                  pooling_layer = global_max_pool,
                  batch_norms = torch.nn.BatchNorm1d,
                  dropout_p = 0.0,
@@ -287,14 +288,6 @@ def get_deg(train_dataset):
     return deg
 
 
-
-
-
-class ACANet:
-# 'aggregators': ['mean', 'min', 'max', 'sum'],
-# 'scalers':['identity', 'amplification', 'attenuation']
-            
-    pass
 
 
 
