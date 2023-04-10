@@ -44,12 +44,9 @@ class SaveBestModel:
                                      'optimizer_state_dict':optimizer.state_dict()
                                      })
 
-            
-            
-            
     def save(self):
         print("Saving final model...")
         print(f"\nBest validation loss: {self.best_valid_loss}")
-        print(f"\nSaving best model for epoch: {self.inMemorySave['epoch']}\n")
+        print(f"\nSaving best model on epoch: {self.inMemorySave['epoch']}\n")
         torch.save(self.inMemorySave, os.path.join(self.save_dir,
                                                    self.save_name))
