@@ -3,15 +3,32 @@
 
 
 # CL-SAR
-Contrastive learning of structure-activity relationship
+Contrastive learning of structure-activity relationship stduies (SAR)
 
-
-Online triplet contrastive learning enables efficient cliff awareness in regression tasks of molecular property prediction
-
+Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction
 
 ------
 
-# installation
+## About
+
+This study proposes the activity-cliff-awareness (ACA) loss for improving molecular activity prediction by deep learning models. The ACA loss enhances both metric learning in the latent space and task learning in the target space during training, making the network aware of the activity-cliff issue. For more details, please refer to the paper titled "Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction."
+
+## Performance
+
+* ACA loss vs. MAE loss on external test set:
+![aca-mae](./doc/image/TestRMSE.png)
+
+
+
+* ACA loss vs. MAE loss on No. of mined triplets during the training:
+![aca-mae-triplets](./doc/image/MinedTriplets.png)
+
+
+
+
+
+
+## Installation
 
 
 ```bash
@@ -21,3 +38,5 @@ pip install -r ./requirements.txt
 
 
 ```
+
+
