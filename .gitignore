@@ -6,7 +6,12 @@ fingerprint_cosine.cfg.gzip
 *.pyc
 #paper
 tmp
+*.pkl
+tempignore
 
+
+
+*/tmpignore/*
 */.ipynb_checkpoints/*
 */__pycache__/*
 */tempignore/*
