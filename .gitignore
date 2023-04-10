@@ -4,10 +4,10 @@ tmpignore
 fingerprint_cosine.cfg.gzip
 *.gzip
 *.pyc
-#paper
 tmp
 *.pkl
 tempignore
+*.pth
 
 
 
