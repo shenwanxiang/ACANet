@@ -26,7 +26,7 @@ More details on usage and performance can be found [here](xx).
 ## ACA loss implementation
 
 * [Pytorch](https://github.com/bidd-group/bidd-clsar/blob/main/clsar/model/loss.py)
-* [Tensorflow](https://github.com/bidd-group/bidd-clsar/blob/main/clsar/model/loss_tf.py)
+* [Tensorflow 2.x](https://github.com/bidd-group/bidd-clsar/blob/main/clsar/model/loss_tf.py)
 
 
 ## Installation
