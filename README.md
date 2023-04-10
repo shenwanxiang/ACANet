@@ -27,7 +27,7 @@ ACA loss vs. MAE loss on external test set and on No. of mined triplets during t
     <img width="40%" src="./doc/image/TestRMSE.png">
     <img width="40%" src="./doc/image/MinedTriplets.png">
 </p>
-More details on usage and performance can be found [here](xx).
+More details on usage and performance can be found [here](https://github.com/bidd-group/bidd-clsar/blob/main/experiment/00_test/03_test_loss.ipynb).
 
 
 ## ACA loss implementation
