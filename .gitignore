@@ -8,6 +8,7 @@ tmp
 *.pkl
 tempignore
 *.pth
+*.th
 
 
 
