@@ -24,9 +24,10 @@ ACA loss vs. MAE loss on external test set and on No. of mined triplets during t
 </p>
 
 
+## ACA loss 
 
-
-
+* [pytorch](./doc/image/MinedTriplets.png)
+* tensorflow
 
 
 
