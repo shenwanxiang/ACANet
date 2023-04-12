@@ -11,7 +11,7 @@ Online triplet contrastive learning enables efficient cliff awareness in molecul
 
 ## About
 
-$$\mathcal{L}_{aca}=\mathcal{L}_{mae}+{a\ast\mathcal{L}}_{tsm}$$
+### $$\mathcal{L}_{aca}=\mathcal{L}_{mae}+{a\ast\mathcal{L}}_{tsm}$$
 
 
 
