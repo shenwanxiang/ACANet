@@ -11,6 +11,8 @@ Online triplet contrastive learning enables efficient cliff awareness in molecul
 
 ## About
 
+L_aca=L_mae+〖a*L〗_tsm
+
 This study proposes the activity-cliff-awareness (ACA) loss for improving molecular activity prediction by deep learning models. The ACA loss enhances both metric learning in the latent space and task learning in the target space during training, making the network aware of the activity-cliff issue. For more details, please refer to the paper titled "Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction."
 
 <p align="left" width="70%">
