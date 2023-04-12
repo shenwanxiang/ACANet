@@ -153,7 +153,6 @@ class ACANet_Base(torch.nn.Module):
                 x = self.batch_norms[i](x)
             x = F.dropout(x, p=self.dropout_p, training=self.training)
         
-
         # global pooling layer: pooling on the whole molecular structure
         embed = self.pooling_layer(x, batch)
         y = self.pooling_layer(x, batch)
