@@ -358,11 +358,13 @@ class ACANet:
             rmse_err = np.std(rmses)
             res.append([cliff_lower, cliff_upper, rmse, rmse_err])
         df2 = pd.DataFrame(res, columns=['cl', 'cu', 'rmse', 'rmse_err'])
+        dfp = df1.append(df2)
+        dfc = dfp.drop_duplicates(['cl', 'cu']).reset_index(drop=True)
         
+        best = dfc.iloc[dfc.rmse.idxmin()]
+        best_cliff_lower = best.cl
+        best_cliff_upper = best.cu
         
-        best_cliff_lower = df2.iloc[df2.rmse.idxmin()].cl
-        dfp = df1.append(df2).reset_index(drop=True)
-        dfc = dfp.drop_duplicates(['cl', 'cu'])
         self.cliff_lower = best_cliff_lower
         self.cliff_upper = best_cliff_upper
         print('Best cliff_lower and cliff_upper parameter is: %s and %s, respectively.' % (best_cliff_lower, best_cliff_upper))
