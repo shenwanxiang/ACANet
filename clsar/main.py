@@ -267,14 +267,15 @@ class ACANet:
 
         
     
-    def opt_alpha_by_cv(self, Xs_train, y_train, n_folds = 5, n_repeats=1, total_epochs=800):
+    def opt_alpha_by_cv(self, Xs_train, y_train, n_folds = 5, n_repeats=1, total_epochs=800, save_rawdata=False):
         '''
         Get the best alpha parameter by the cross-validation performance
         '''
 
-        alphas = [0., 0.01 ,  0.05,  0.1 , 0.2,  0.5  , 1.   ]
+        alphas = [0., 0.01,  0.05,  0.1 , 0.2,  0.5  , 1.   ]
         w = 5
         res = []
+        rawdata = []
         for alpha in alphas:
             rmses = []
             for rp in range(n_repeats):
@@ -284,20 +285,25 @@ class ACANet:
                                        cliff_upper = self.cliff_upper, 
                                        n_folds = n_folds, 
                                        total_epochs = total_epochs)
-
+                
+                rawdata.append({'alpha':alpha, 'repeat':rp, 'dfcv':dfcv})
                 rmse_best = dfcv.mean(axis=1).rolling(w).mean().min()
                 rmses.append(rmse_best)
- 
+
             rmse = np.mean(rmses)
             rmse_err = np.std(rmses)
             res.append([alpha, rmse, rmse_err])
 
+        if save_rawdata:
+            dump(rawdata, os.path.join(self.work_dir, 'alpha_performance_rawdata.pkl'))
+        
         dfa = pd.DataFrame(res, columns=['alpha', 'rmse', 'rmse_err'])
         best_alpha = dfa.iloc[dfa.rmse.idxmin()].alpha
         self.alpha = best_alpha
         print('Best cliff-awareness factor alpha by cross-validation is: %s' % best_alpha)
         
         plot_dfa_save(dfa, save_dir = self.work_dir)
+       
         
         return dfa
     
