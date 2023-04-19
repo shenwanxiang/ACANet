@@ -267,12 +267,11 @@ class ACANet:
 
         
     
-    def opt_alpha_by_cv(self, Xs_train, y_train, n_folds = 5, n_repeats=1, total_epochs=800, save_rawdata=False):
+    def opt_alpha_by_cv(self, Xs_train, y_train, n_folds = 5, n_repeats=1, total_epochs=800, save_rawdata=False, alphas = [0., 0.01,  0.05,  0.1 , 0.2,  0.5  , 1.   ], random_state = 42):
         '''
         Get the best alpha parameter by the cross-validation performance
         '''
 
-        alphas = [0., 0.01,  0.05,  0.1 , 0.2,  0.5  , 1.   ]
         w = 5
         res = []
         rawdata = []
@@ -284,7 +283,7 @@ class ACANet:
                                        cliff_lower = self.cliff_lower, 
                                        cliff_upper = self.cliff_upper, 
                                        n_folds = n_folds, 
-                                       total_epochs = total_epochs)
+                                       total_epochs = total_epochs, random_state = random_state)
                 
                 rawdata.append({'alpha':alpha, 'repeat':rp, 'dfcv':dfcv})
                 rmse_best = dfcv.mean(axis=1).rolling(w).mean().min()
@@ -309,10 +308,10 @@ class ACANet:
     
 
     
-    def opt_cliff_by_cv(self, Xs_train, y_train, n_folds = 5, n_repeats=1, total_epochs = 800):
+    def opt_cliff_by_cv(self, Xs_train, y_train, n_folds = 5, n_repeats=1, total_epochs = 800,  upper_cliffs = list(np.arange(0.5, 4.5, 0.5).round(2)), random_state = 42):
 
         #upper_cliffs = list(np.arange(0.3, 4.2, 0.3).round(2))
-        upper_cliffs = list(np.arange(0.5, 4.5, 0.5).round(2))
+       
         # find best cliff_upper
         w = 3
         res = []
@@ -326,7 +325,7 @@ class ACANet:
                                        cliff_lower = cliff_lower, 
                                        cliff_upper = cliff_upper, 
                                        n_folds = n_folds, 
-                                       total_epochs = total_epochs)
+                                       total_epochs = total_epochs, random_state = random_state)
                 rmse_best = dfcv.mean(axis=1).rolling(w).mean().min()
                 rmses.append(rmse_best)
  
@@ -356,7 +355,7 @@ class ACANet:
                                        cliff_lower = cliff_lower, 
                                        cliff_upper = cliff_upper, 
                                        n_folds = n_folds, 
-                                       total_epochs = total_epochs)
+                                       total_epochs = total_epochs, random_state = random_state)
                 rmse_best = dfcv.mean(axis=1).rolling(w).mean().min()
                 rmses.append(rmse_best)
                 
@@ -380,7 +379,7 @@ class ACANet:
 
     def opt_epoch_by_cv(self, Xs_train, y_train, 
                         n_folds = 5, 
-                        total_epochs = 800):
+                        total_epochs = 800, random_state = 42):
         
         
         dfcv = self._cv_performance(Xs_train, y_train,
@@ -388,7 +387,7 @@ class ACANet:
                                    cliff_lower = self.cliff_lower, 
                                    cliff_upper = self.cliff_upper, 
                                    n_folds = n_folds, 
-                                   total_epochs = total_epochs)
+                                   total_epochs = total_epochs, random_state = random_state)
         dfe = dfcv.mean(axis=1).rolling(100).mean()        
         best_epoch = dfe.idxmin()
         self.epochs = best_epoch
@@ -480,12 +479,12 @@ class ACANet:
 
     
 
-    def cv_fit(self, Xs_train, y_train, n_folds = 5, verbose=1):
+    def cv_fit(self, Xs_train, y_train, n_folds = 5, verbose=1, random_state = 42):
         '''
         Fit the model by cross-validation strategy, you will generate the n_fold sub-models for the prediction
         '''
 
-        splits = self._cv_split(y_train, n_folds = n_folds)
+        splits = self._cv_split(y_train, n_folds = n_folds, , random_state = random_state)
         cv_models = []
         for i, split in enumerate(splits):
             inner_train_x = Xs_train[split['inner_train_idx']]
