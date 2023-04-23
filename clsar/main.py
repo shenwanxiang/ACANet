@@ -484,7 +484,7 @@ class ACANet:
         Fit the model by cross-validation strategy, you will generate the n_fold sub-models for the prediction
         '''
 
-        splits = self._cv_split(y_train, n_folds = n_folds, , random_state = random_state)
+        splits = self._cv_split(y_train, n_folds = n_folds, random_state = random_state)
         cv_models = []
         for i, split in enumerate(splits):
             inner_train_x = Xs_train[split['inner_train_idx']]
