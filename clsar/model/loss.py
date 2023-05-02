@@ -271,3 +271,137 @@ def get_best_cliff_batch(train_dataset,
     best_cliff = c_distribution.idxmax()
     return best_cliff
 
+
+
+
+#Add absolute structure mask of Tanimoto Similarity
+def _fp_aca_loss(labels,
+              predictions, 
+              embeddings,
+              fps,
+              alpha=0.1,
+              cliff_lower=0.2,
+              cliff_upper=1.0,
+              sim_threshould_neg=0.9,
+              sim_threshould_pos=1,
+              squared = False,
+              p = 2.0,
+              dev_mode = True
+              ):
+    '''
+       union loss of a batch (mae loss and triplet loss with soft margin)
+       -------------------------------
+       Args:
+          labels: shape = （batch_size,）
+          predictions: shape = （batch_size,） 
+          embeddings: shape = (batch_size, embedding_vector_size)
+          alpha (float, optional): awareness factor. Default: :math:`0.1`.
+          cliff_lower (float, optional): The threshold for mining the postive samples. Default: ``1.0``
+          cliff_upper (float, optional): The threshold for mining the negative samples. Default: ``1.0``
+          sim_threshould (float,optional): The threshold for mining the samples with simlilar struncture . Default: ``0.9``
+          p (float, optional) – p value for the p-norm distance to calculate between each vector pair ∈[0,∞].
+          squared (bool, optional): if True, the mse loss will be used, otherwise mae. The L(tsm) will also be squared.
+       Returns:
+         loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets
+    '''
+
+    if squared:
+        reg_loss = torch.mean((labels-predictions).abs()**2)
+    else:
+        reg_loss = torch.mean((labels-predictions).abs())
+
+    device = embeddings.device
+    
+    # label pairwise distance for soft margin
+    labels_dist = pairwise_distance(embeddings=labels, p = p, squared=squared)
+    margin_pos = labels_dist.unsqueeze(2)
+    margin_neg = labels_dist.unsqueeze(1)
+    margin = margin_neg - margin_pos
+    #margin = torch.maximum(margin, torch.tensor([0.0]).to(device))
+    
+    # embedding pairwise distance for (a, p, n) mining
+    pairwise_dis = pairwise_distance(embeddings=embeddings, p = p, squared=squared)
+    anchor_positive_dist = pairwise_dis.unsqueeze(2)
+    assert anchor_positive_dist.shape[2] == 1, "{}".format(
+        anchor_positive_dist.shape)
+    anchor_negative_dist = pairwise_dis.unsqueeze(1)
+    assert anchor_negative_dist.shape[1] == 1, "{}".format(
+        anchor_negative_dist.shape)
+    #triplet_loss = anchor_positive_dist - anchor_negative_dist + margin
+    triplet_loss = anchor_positive_dist - anchor_negative_dist + margin
+
+    mask = get_triplet_fp_mask(labels=labels, fps=fps, device=device,
+                             cliff_lower=cliff_lower, cliff_upper=cliff_upper,
+                             sim_threshould_neg=sim_threshould_neg, sim_threshould_pos=sim_threshould_pos)
+    mask = mask.float()
+    n_mined_triplets = torch.sum(mask)  # total number of mined triplets
+    
+    triplet_loss = torch.mul(mask, triplet_loss)
+    triplet_loss = torch.maximum(triplet_loss, torch.tensor([0.0]).to(device))
+
+    # Count the number of the triplet that > 0. Should be decreased with increasing of the epochs
+    pos_triplets = (triplet_loss > 1e-16).float()
+    n_pos_triplets = torch.sum(pos_triplets)  # torch.where
+
+    # tsm_loss = torch.sum(triplet_loss) / (n_mined_triplets + 1e-16)
+    # loss = reg_loss + alpha*tsm_loss
+
+    if n_mined_triplets == 0:
+        tsm_loss = n_mined_triplets.float()
+        loss = reg_loss 
+
+    else:
+        tsm_loss = torch.sum(triplet_loss) / n_mined_triplets
+        loss = reg_loss + alpha*tsm_loss
+        
+    if dev_mode:
+        return loss, reg_loss, tsm_loss, n_mined_triplets, n_pos_triplets
+    else:
+        return loss
+
+# Get abosolute struct mask which selects samples that satisfy FP similarity constrains. e.g. Tanimoto Similarity
+def get_fp_mask(fps, device, struct_threshould_neg=0.9, struct_threshould_pos=1, eps=1e-5):
+    
+    assert len(fps.size())=2, 'The FP shape should be [batch, fingerprint_dim]'
+    common = torch.bitwise_and(fps.unsqueeze(0),fps.unsqueeze(1))
+    a_add_b = torch.bitwise_add(fps.unsqueeze(0),fps.unsqueeze(1))
+    
+    C = common.sum(-1)
+    A_add_B = a_add_b.sum(-1)
+    similarity = C / (A_add_B- C + eps)
+    sim_mask_neg = similarity > struct_threshould_neg
+    sim_mask_pos = similarity < struct_threshould_pos
+    # The same as former triplet mask, dim 'j' denotes positive sample, dim 'i' denotes negatice samples
+    mask = torch.logical_and(sim_mask_neg.unsqueeze(1), sim_mask_neg.unsqueeze(2)).to(device)
+    return mask   
+
+def get_triplet_fp_mask(labels, fps, device, cliff_lower = 0.2, cliff_upper = 1.0, 
+                            struct_threshould_neg=0.9, struct_threshould_pos=1):
+
+    indices_equal = torch.eye(labels.shape[0]).bool()
+    indices_not_equal = torch.logical_not(indices_equal)
+    i_not_equal_j = torch.unsqueeze(indices_not_equal, 2)
+    i_not_equal_k = torch.unsqueeze(indices_not_equal, 1)
+    j_not_equal_k = torch.unsqueeze(indices_not_equal, 0)
+
+    distinct_indices = torch.logical_and(torch.logical_and(i_not_equal_j, i_not_equal_k), j_not_equal_k).to(device)
+
+    #labels = torch.unsqueeze(labels, -1)
+    #print('labels:',labels)
+    target_l1_dist = torch.cdist(labels,labels, p=1) 
+    label_equal = target_l1_dist < cliff_lower #0.5
+    label_unequal  = target_l1_dist >= cliff_upper #1.5
+    
+    #print('label_equal:',label_equal)
+    i_equal_j = torch.unsqueeze(label_equal, 2)
+    #i_equal_k = torch.unsqueeze(label_equal, 1)
+    i_unequal_k = torch.unsqueeze(label_unequal, 1)
+    
+    valid_labels = torch.logical_and(i_equal_j, i_unequal_k).to(device)
+    #print('val_indice',valid_labels[0])
+    
+    valid_fps = get_fp_mask(fps, device, struct_threshould_neg=struct_threshould_neg, 
+                                   struct_threshould_pos=struct_threshould_pos)
+    
+    mask = torch.logical_and(torch.logical_and(distinct_indices, valid_labels), valid_fps)
+    return mask   
