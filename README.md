@@ -94,5 +94,5 @@ test_pred_pIC50 = clf.cv_predict(Xs_test)
 
 ## Citation
 
-Wan Xiang Shen, Chao Cui, and Xiang Cheng Shi, et al. `Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction`.
+`Wan Xiang Shen, Chao Cui, Xiang Cheng Shi, et al. Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction`.
 
