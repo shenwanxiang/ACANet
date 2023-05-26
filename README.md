@@ -30,7 +30,7 @@ The left panel depicts a model without ACA, where the presence of an activity cl
 ACA loss vs. MAE loss on external test set and on No. of mined triplets during the training:
 <p align="left" width="100%">
     <img width="45%" src="./doc/image/TestRMSE.png">
-    <img width="58%" src="./doc/image/MinedTriplets.png">
+    <img width="48%" src="./doc/image/MinedTriplets.png">
 </p>
 
 More details on usage and performance can be found [here](https://github.com/bidd-group/bidd-clsar/blob/main/experiment/00_test/03_test_loss.ipynb).
