@@ -36,21 +36,63 @@ ACA loss vs. MAE loss on external test set and on No. of mined triplets during t
 More details on usage and performance can be found [here](https://github.com/bidd-group/bidd-clsar/blob/main/experiment/00_test/03_test_loss.ipynb).
 
 
+
 ## ACA loss implementation
 
 * [Pytorch](https://github.com/bidd-group/bidd-clsar/blob/main/clsar/model/loss.py)
 * [Tensorflow 2.x](https://github.com/bidd-group/bidd-clsar/blob/main/clsar/model/loss_tf.py)
 
 
-## Installation
 
+## ACA loss usage 
+```python
 
-```bash
-conda create -c conda-forge -n clsar rdkit
-conda activate clsar
-pip install -r ./requirements.txt 
+#Pytorch
+from clsar.model.loss import ACALoss
 
+#Tensorflow
+from clsar.model.loss_tf import ACALoss
 
+aca_loss = ACALoss(dev_mode = False)
+loss = aca_loss(labels,  predictions, embeddings)
+loss.backward()
 ```
 
+
+## Installation
+
+```bash
+pip install clsar
+```
+
+
+
+
+## Run ACANet
+
+```python
+from clsar import ACANet
+#Xs_train: list of SMILES string of training set
+#y_train_pIC50: the pChEMBL labels of training set
+
+## init ACANet
+clf = ACANet(gpuid = 0,   work_dir = './')
+
+## get loss hyperparameters by training set 
+dfp = clf.opt_cliff_by_cv(Xs_train, y_train_pIC50, total_epochs=50, n_repeats=3)
+dfa = clf.opt_alpha_by_cv(Xs_train, y_train_pIC50, total_epochs=100, n_repeats=3)
+
+
+## cross-validation fit
+clf.cv_fit(Xs_train, y_train_pIC50, verbose=1)
+
+
+## 5FCV predict and convert pIC50 to y
+test_pred_pIC50 = clf.cv_predict(Xs_test)
+```
+
+
+## Citation
+
+Wan Xiang Shen, Chao Cui, and Xiang Cheng Shi, et al. `Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction`.
 
