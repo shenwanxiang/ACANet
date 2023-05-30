@@ -49,13 +49,14 @@ More details on usage and performance can be found [here](https://github.com/bid
 
 #Pytorch
 from clsar.model.loss import ACALoss
+aca_loss = ACALoss(alpha=0.1, cliff_lower = 0.2, cliff_upper = 1.0, p = 1., squared = False)
+loss = aca_loss(labels,  predictions, embeddings)
+loss.backward()
+
 
 #Tensorflow
 from clsar.model.loss_tf import ACALoss
 
-aca_loss = ACALoss(alpha=0.1, cliff_lower = 0.2, cliff_upper = 1.0, p = 1., squared = False, dev_mode = False)
-loss = aca_loss(labels,  predictions, embeddings)
-loss.backward()
 ```
 
 
