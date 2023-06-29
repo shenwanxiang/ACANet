@@ -1,6 +1,7 @@
 <a href="url"><img src="./doc/image/logo.png" align="left" height="130" width="140" ></a>
 
 [![Codeocean](https://img.shields.io/badge/reproduction-codeocean-9cf)](https://codeocean.com/capsule/8102819/tree/v1)
+[![PyPI version](https://badge.fury.io/py/clsar.svg)](https://badge.fury.io/py/clsar)
 
 
 
@@ -97,5 +98,5 @@ test_pred_pIC50 = clf.cv_predict(Xs_test)
 
 ## Citation
 
-Wan Xiang Shen*, Chao Cui*, Xiang Cheng Shi, et al. `Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction` [J]. ChemRxiv Pub Date : 2023-05-29 , DOI: 10.26434/chemrxiv-2023-5cz7s.
+Wan Xiang Shen*, Chao Cui*, Xiang Cheng Shi et al. `Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction`, 28 June 2023, PREPRINT (Version 1) available at Research Square [https://doi.org/10.21203/rs.3.rs-2988283/v1].
 
