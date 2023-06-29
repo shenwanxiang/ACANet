@@ -2,7 +2,7 @@
 
 torch
 torch-geometric
-torch-scatter
-torch-sparse
 numpy
 pandas
+seaborn
+rdkit

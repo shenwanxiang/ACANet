@@ -1,5 +1,7 @@
 <a href="url"><img src="./doc/image/logo.png" align="left" height="130" width="140" ></a>
 
+[![Codeocean](https://img.shields.io/badge/reproduction-codeocean-9cf)](https://codeocean.com/capsule/8102819/tree/v1)
+
 
 
 # CL-SAR
@@ -33,7 +35,7 @@ ACA loss vs. MAE loss on external test set and on No. of mined triplets during t
     <img width="48%" src="./doc/image/MinedTriplets.png">
 </p>
 
-More details on usage and performance can be found [here](https://github.com/bidd-group/bidd-clsar/blob/main/experiment/00_test/03_test_loss.ipynb).
+More details on usage and performance can be found [here](https://github.com/bidd-group/bidd-clsar/blob/main/experiment/00_test/04_test_loss_HSSMS.ipynb).
 
 
 
