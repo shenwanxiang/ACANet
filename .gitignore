@@ -9,7 +9,9 @@ tmp
 tempignore
 *.pth
 *.th
-
+*build/
+*.egg-info/
+*dist/
 
 
 */tmpignore/*
