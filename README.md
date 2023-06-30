@@ -82,16 +82,16 @@ from clsar import ACANet
 ## init ACANet
 clf = ACANet(gpuid = 0,   work_dir = './')
 
-## get loss hyperparameters by training set 
+## get loss hyperparameters (cliff_lower, cliff_upper, and alpha) by training set 
 dfp = clf.opt_cliff_by_cv(Xs_train, y_train_pIC50, total_epochs=50, n_repeats=3)
 dfa = clf.opt_alpha_by_cv(Xs_train, y_train_pIC50, total_epochs=100, n_repeats=3)
 
 
-## cross-validation fit
+## fit model using 5fold cross-validation
 clf.cv_fit(Xs_train, y_train_pIC50, verbose=1)
 
 
-## 5FCV predict and convert pIC50 to y
+## make prediction using the 5-submodels, the outputs are the average of the 5-submodels
 test_pred_pIC50 = clf.cv_predict(Xs_test)
 ```
 
