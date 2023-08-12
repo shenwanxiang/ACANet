@@ -2,7 +2,7 @@
 
 [![Codeocean](https://img.shields.io/badge/reproduction-codeocean-9cf)](https://codeocean.com/capsule/8102819/tree/v1)
 [![PyPI version](https://badge.fury.io/py/clsar.svg)](https://badge.fury.io/py/clsar)
-
+[![Downloads](https://static.pepy.tech/badge/clsar)](https://pepy.tech/project/clsar)
 
 
 # CL-SAR
