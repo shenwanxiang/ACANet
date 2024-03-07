@@ -1,1 +1,1 @@
-{"dataset": "CHEMBL287_Ki", "rmse": 0.7688788257874322, "cliff_rmse": 0.7824748170648798}
+{"dataset": "CHEMBL287_Ki", "rmse": 0.6877491100997396, "cliff_rmse": 0.7505229217901284}
