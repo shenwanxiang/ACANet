@@ -3,12 +3,15 @@
 [![Codeocean](https://img.shields.io/badge/reproduction-codeocean-9cf)](https://codeocean.com/capsule/8102819/tree/v1)
 [![PyPI version](https://badge.fury.io/py/clsar.svg)](https://badge.fury.io/py/clsar)
 [![Downloads](https://static.pepy.tech/badge/clsar)](https://pepy.tech/project/clsar)
+[![Dataset](https://img.shields.io/badge/dataset-MPCD-green)](https://github.com/bidd-group/MPCD)
 
 
 # CL-SAR
 Contrastive learning of structure-activity relationship stduies (SAR)
 
 Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction
+
+
 
 ------
 
@@ -98,7 +101,7 @@ test_pred_pIC50 = clf.cv_predict(Xs_test)
 
 ## Citation
 
-Wan Xiang Shen*, Chao Cui*, Xiang Cheng Shi et al. `Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction`, 28 June 2023, PREPRINT (Version 1) available at Research Square [https://doi.org/10.21203/rs.3.rs-2988283/v1].
+Wan Xiang Shen*, Chao Cui*, Jian Ming Wang*, Xiang Cheng Shi et al. `Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction`, 28 June 2023, PREPRINT (Version 1) available at Research Square [https://doi.org/10.21203/rs.3.rs-2988283/v1].
 
 
 
