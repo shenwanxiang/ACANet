@@ -1,3 +1,4 @@
+# CL-SAR
 <a href="url"><img src="./doc/image/logo.png" align="left" height="130" width="140" ></a>
 
 [![Codeocean](https://img.shields.io/badge/reproduction-codeocean-9cf)](https://codeocean.com/capsule/8102819/tree/v1)
@@ -6,16 +7,15 @@
 [![Dataset](https://img.shields.io/badge/dataset-MPCD-green)](https://github.com/bidd-group/MPCD)
 
 
-# CL-SAR
-Contrastive learning of structure-activity relationship stduies (SAR)
+----------
+CLSAR: Contrastive learning of structure-activity relationship stduies (SAR)
+
+
+----------
+## About
 
 Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction
 
-
-
-------
-
-## About
 ```math
 $$\mathcal{L}_{aca}=\mathcal{L}_{mae}+{a\ast\mathcal{L}}_{tsm}$$
 ```
