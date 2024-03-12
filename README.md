@@ -2,6 +2,7 @@
 <a href="url"><img src="./doc/image/logo.png" align="left" height="130" width="140" ></a>
 [![Dataset](https://img.shields.io/badge/dataset-MPCD-green)](https://github.com/bidd-group/MPCD)
 [![Paper](https://img.shields.io/badge/paper-Researchsquare-yellow)](https://www.researchsquare.com/article/rs-2988283/v1)
+[![Paper](https://img.shields.io/badge/paper-Chemrxiv-orange)](https://chemrxiv.org/engage/chemrxiv/article-details/6470c963be16ad5c57f5526c)
 [![Codeocean](https://img.shields.io/badge/reproduction-Codeocean-9cf)](https://codeocean.com/capsule/8102819/tree/v1)
 [![PyPI version](https://badge.fury.io/py/clsar.svg)](https://badge.fury.io/py/clsar)
 [![Downloads](https://static.pepy.tech/badge/clsar)](https://pepy.tech/project/clsar)
