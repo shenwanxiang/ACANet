@@ -5,6 +5,7 @@
 [![PyPI version](https://badge.fury.io/py/clsar.svg)](https://badge.fury.io/py/clsar)
 [![Downloads](https://static.pepy.tech/badge/clsar)](https://pepy.tech/project/clsar)
 [![Dataset](https://img.shields.io/badge/dataset-MPCD-green)](https://github.com/bidd-group/MPCD)
+[![Paper](https://img.shields.io/badge/paper-Researchsquare-lightgreen)]([https://github.com/bidd-group/MPCD](https://www.researchsquare.com/article/rs-2988283/v1))
 
 
 ----------
