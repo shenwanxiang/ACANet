@@ -363,7 +363,7 @@ class ACANet:
             rmse_err = np.std(rmses)
             res.append([cliff_lower, cliff_upper, rmse, rmse_err])
         df2 = pd.DataFrame(res, columns=['cl', 'cu', 'rmse', 'rmse_err'])
-        dfp = df1.append(df2)
+        dfp = df1._append(df2)
         dfc = dfp.drop_duplicates(['cl', 'cu']).reset_index(drop=True)
         
         best = dfc.iloc[dfc.rmse.idxmin()]
