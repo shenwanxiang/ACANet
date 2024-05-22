@@ -50,7 +50,7 @@ def cross_validation_file(data_path, prop, model, k=10, seed=1): # Cross-validat
 ###################
 
 properties = ['FUBrain', 'RenClear', 'FreeSolv', 'MicroClear', 'HemoTox', 'HepClear', 'Caco2', 'Sol', 'VDss', 'HalfLife']
-models = [ACANet()]
+models = [DeepDelta(), Trad_ChemProp(), Trad_RF(), Trad_LGBM(), Delta_LGBM()]
 
 for model in models:
     for prop in properties:
