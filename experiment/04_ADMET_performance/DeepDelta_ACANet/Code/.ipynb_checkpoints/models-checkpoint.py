@@ -260,18 +260,13 @@ class Delta_LGBM(abstractDeltaModel):
 
 
 import sys
-sys.path.insert(0, '/home/was966/Research/bidd-clsar')
+sys.path.insert(0, '/home/shenwanxiang/Research/bidd-clsar')
 from clsar import ACANet
 class ACANetOOTB(abstractDeltaModel):
 
-    dirpath = None 
-
-    def __init__(self, epochs = 500, alpha = 1e-1, dirpath = './'):
-        self.epochs = epochs
+    def __init__(self, dirpath = './', **kwargs):
         self.dirpath = dirpath
-
-        self.model = ACANet(gpuid = 0,  alpha = alpha, work_dir = dirpath)
-        self.alpha = alpha
+        self.model = ACANet(work_dir = dirpath, **kwargs)
 
     def fit(self, x, y, metric='r2'):
 
@@ -279,8 +274,7 @@ class ACANetOOTB(abstractDeltaModel):
         
         x = x.values
         y = y.values
-        
-        self.dirpath = tempfile.NamedTemporaryFile().name # use temporary file to store model
+
         ## get loss hyperparameters (cliff_lower, cliff_upper, and alpha) by training set
         dfp = self.model.opt_cliff_by_trps(x, y, iterations = 5)
         #dfp = self.model.opt_cliff_by_cv(x, y, total_epochs=50, n_repeats=1)
@@ -299,19 +293,15 @@ class ACANetOOTB(abstractDeltaModel):
 
     
     def __str__(self):
-        return "ACANetOOTB" + str(self.epochs)
+        return "ACANetOOTB"
 
 
 class ACANetOPT(abstractDeltaModel):
 
-    dirpath = None 
-
-    def __init__(self, epochs = 500, alpha = 1e-1, dirpath = './'):
-        self.epochs = epochs
+    def __init__(self, dirpath = './', **kwargs):
         self.dirpath = dirpath
+        self.model = ACANet(work_dir = dirpath, **kwargs)
 
-        self.model = ACANet(gpuid = 0,  alpha = alpha, work_dir = dirpath)
-        self.alpha = alpha
 
     def fit(self, x, y, metric='r2'):
 
@@ -319,14 +309,9 @@ class ACANetOPT(abstractDeltaModel):
         
         x = x.values
         y = y.values
-        
-        self.dirpath = tempfile.NamedTemporaryFile().name # use temporary file to store model
-        ## get loss hyperparameters (cliff_lower, cliff_upper, and alpha) by training set
-        #dfp = self.model.opt_cliff_by_trps(x, y, iterations = 5)
+
         dfp = self.model.opt_cliff_by_cv(x, y, total_epochs=50, n_repeats=1)
         dfa = self.model.opt_alpha_by_cv(x, y, total_epochs=100, n_repeats=1)
-        #opt_cliff_by_trps
-        
         ## fit model
         self.model.cv_fit(x, y, verbose=1)
         
@@ -339,7 +324,7 @@ class ACANetOPT(abstractDeltaModel):
 
     
     def __str__(self):
-        return "ACANetOPT" + str(self.epochs)
+        return "ACANetOPT" 
 
 
 
