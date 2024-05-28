@@ -296,6 +296,36 @@ class ACANetOOTB(abstractDeltaModel):
         return "ACANetOOTB"
 
 
+class ACANetOPTPoC(abstractDeltaModel):
+
+    def __init__(self, dirpath = './', **kwargs):
+        self.dirpath = dirpath
+        self.model = ACANet(work_dir = dirpath, **kwargs)
+
+
+    def fit(self, x, y, metric='r2'):
+
+        #print(x)
+        
+        x = x.values
+        y = y.values
+
+        dfp = self.model.opt_cliff_by_cv(x, y, total_epochs=100, n_repeats=5)
+        dfa = self.model.opt_alpha_by_cv(x, y, total_epochs=100, n_repeats=5)
+        ## fit model
+        self.model.cv_fit(x, y, verbose=1)
+        
+
+    def predict(self, x):
+        x = x.values
+        predictions = pd.DataFrame(self.model.cv_predict(x)) # Predict using traditional methods
+        results = pd.merge(predictions,predictions,how='cross') # Cross merge into pairs after predictions
+        return results['0_y'] - results['0_x']  # Calculate and return the delta values
+
+    
+    def __str__(self):
+        return "ACANetOPTPoC" 
+    
 class ACANetOPT(abstractDeltaModel):
 
     def __init__(self, dirpath = './', **kwargs):
@@ -325,6 +355,9 @@ class ACANetOPT(abstractDeltaModel):
     
     def __str__(self):
         return "ACANetOPT" 
+    
+    
+
 
 
 
