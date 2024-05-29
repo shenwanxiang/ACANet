@@ -11,3 +11,6 @@
 
 #### RandomForest
 * Provides results for 5x10-fold cross-validation on 10 ADMET benchmarking datasets for the Random Forest model.
+
+#### ACANetOPT
+* Provides results for 5x10-fold cross-validation on 10 ADMET benchmarking datasets for the ACANet model.
