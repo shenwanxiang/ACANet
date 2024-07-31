@@ -140,7 +140,7 @@ def get_triplet_mask(labels, device, cliff_lower = 0.2, cliff_upper = 1.0):
 # Get abosolute struct mask which selects samples that satisfy FP similarity constrains. e.g. Tanimoto Similarity
 def get_fp_mask(fps, device, struct_threshould_neg=0.9, struct_threshould_pos=1, eps=1e-5):
     
-    assert len(fps.size())=2, 'The FP shape should be [batch, fingerprint_dim]'
+    assert len(fps.size())==2, 'The FP shape should be [batch, fingerprint_dim]'
     common = torch.bitwise_and(fps.unsqueeze(0),fps.unsqueeze(1))
     a_add_b = torch.bitwise_add(fps.unsqueeze(0),fps.unsqueeze(1))
     
