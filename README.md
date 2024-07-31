@@ -14,7 +14,7 @@ Code repository for activity cliff-awareness (ACA) loss and graph-based ACANet m
 ----------
 ## About
 
-### 1) ACALoss
+#### 1) ACALoss
 This study proposes the activity-cliff-awareness (ACA) loss for improving molecular activity prediction by deep learning models. The ACA loss enhances both metric learning in the latent space and task learning in the target space during training, making the network aware of the activity-cliff issue. For more details, please refer to the paper titled "Online triplet contrastive learning enables efficient cliff awareness in molecular activity prediction."
 
 <p align="left" width="65%">
@@ -23,7 +23,7 @@ This study proposes the activity-cliff-awareness (ACA) loss for improving molecu
 **Comparison of models for molecular activity prediction, one without (left) and one with (right) activity cliff awareness (ACA).**
 The left panel depicts a model without ACA, where the presence of an activity cliff triplet (A, P, N) creates a challenge for the model to learn in the latent space. Due to the similarity between A and N in their chemical structures, the model learns graph representations that result in the distance between A-P being far greater than A-N, leading to poor training and prediction results. However, the right panel shows a model with ACA that optimizes the latent vectors in the latent space, making A closer to P and further away from N. The model with ACA combines metric learning in the latent space with minimizing the error for regression learning, while the model without ACA only focuses on the regression loss and may not effectively handle activity cliffs. 
 
-### 2) ACANet
+#### 2) ACANet
 ACANet is a deep learning model that developed based on the proposed ACALoss and graph neural network. It can tune the hyperparameters of ACALoss automatically, and provides a high-level interface of training and test in the deep learning model (Users can use it just like scikit-learn)
 
 
