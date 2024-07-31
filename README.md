@@ -8,7 +8,7 @@
 [![Downloads](https://static.pepy.tech/badge/clsar)](https://pepy.tech/project/clsar)
 
 ----------
-CLSAR: Contrastive learning of structure-activity relationship stduies (SAR)
+Code repository for activity cliff-awareness (ACA) loss and graph-based ACANet model
 
 
 ----------
