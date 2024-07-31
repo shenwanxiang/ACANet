@@ -1,4 +1,4 @@
-# CL-SAR
+# Activity Cliff Awareness (ACA)
 <a href="url"><img src="./doc/image/logo.png" align="left" height="130" width="140" ></a>
 [![Dataset](https://img.shields.io/badge/datasets-MPCD-green)](https://github.com/bidd-group/MPCD)
 [![Paper](https://img.shields.io/badge/paper-Researchsquare-yellow)](https://www.researchsquare.com/article/rs-2988283/v1)
