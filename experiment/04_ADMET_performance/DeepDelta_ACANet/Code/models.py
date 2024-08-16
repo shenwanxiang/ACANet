@@ -260,7 +260,7 @@ class Delta_LGBM(abstractDeltaModel):
 
 
 import sys
-sys.path.insert(0, '/home/shenwanxiang/Research/bidd-clsar')
+sys.path.insert(0, '/home/was966/Research/bidd-clsar')
 from clsar import ACANet
 class ACANetOOTB(abstractDeltaModel):
 
@@ -309,9 +309,10 @@ class ACANetOPTPoC(abstractDeltaModel):
         
         x = x.values
         y = y.values
-
-        dfp = self.model.opt_cliff_by_cv(x, y, total_epochs=100, n_repeats=5)
-        dfa = self.model.opt_alpha_by_cv(x, y, total_epochs=100, n_repeats=5)
+        
+        dfp = self.model.opt_cliff_by_cv(x, y, total_epochs=50, n_folds = 10, upper_cliffs = list(np.arange(0.5, 3, 0.5).round(2)), n_repeats=2)
+        dfa = self.model.opt_alpha_by_cv(x, y, total_epochs=50, n_folds = 10, alphas = [0., 0.01,  0.05,  0.1 , 0.2,  0.5  , 1.],  n_repeats=2)
+        
         ## fit model
         self.model.cv_fit(x, y, verbose=1)
         
