@@ -96,7 +96,5 @@ test_pred_pIC50 = clf.cv_predict(Xs_test)
 
 
 ## Citation
-
-Wan Xiang Shen*, Chao Cui*, ...,Yu Zong Chen$, and Marinka Zitnik$."Activity Cliff-Informed Contrastive Learning for Molecular Property Prediction." (2024).
-
-
+SHEN W, Cui C, Su X, Zhang Z, Velez-Arce A, Wang J, et al. Activity Cliff-Informed Contrastive Learning
+for Molecular Property Prediction. ChemRxiv. 2024; doi:10.26434/chemrxiv-2023-5cz7s-v2.
