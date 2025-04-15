@@ -33,7 +33,7 @@ for dataset_name in ['CHEMBL4203_Ki']: #['CHEMBL4203_Ki']:
     y_train_pIC50 = y_to_pIC50(y_train)
 
     ## get loss parameters by training set
-    clf = ACANet(gpuid = 0,   work_dir = save_dir, pre_transform=Gen39AtomFeatures_full(), scaffold_filter=True)
+    clf = ACANet(gpuid = 0,   work_dir = save_dir, pre_transform=Gen39AtomFeatures_full(), scaffold_filter=True) ## scaffold_filter, fp_filter
     #dfp = clf.opt_cliff_by_trps(Xs_train, y_train_pIC50, iterations=5)
     dfp = clf.opt_cliff_by_cv(Xs_train, y_train_pIC50, total_epochs=50, n_repeats=3)
     dfa = clf.opt_alpha_by_cv(Xs_train, y_train_pIC50, total_epochs=100, n_repeats=3)
