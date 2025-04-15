@@ -21,7 +21,7 @@ import seaborn as sns
 sns.set(style='white',  font='sans-serif', font_scale=2)
 
 
-from clsar.feature import Gen39AtomFeatures  # feature
+from clsar.feature import Gen39AtomFeatures # feature
 from clsar.model.model import ACANet_PNA, get_deg, _fix_reproducibility # model
 from clsar.model.loss import ACALoss, get_best_cliff
 from clsar.model.saver import SaveBestModel
@@ -39,13 +39,15 @@ class ACANet:
                  
                  ## loss parameters
                  alpha = 1e-1,
-                 cliff_lower = 1.0,
+                 cliff_lower = 0.5,
                  cliff_upper = 1.0,
                  squared = False,
                  p = 2.0,
+                 fp_filter = None,
+                 scaffold_filter =None,
                  
                  #feature parameters
-                 pre_transform = Gen39AtomFeatures(),
+                 pre_transform = Gen39AtomFeatures,
                  
                  # model paramaters
                  out_channels = 1,  #output dim.
@@ -90,7 +92,9 @@ class ACANet:
         self.cliff_upper = cliff_upper        
         self.squared = squared
         self.p = p
-        
+        self.fp_filter = fp_filter
+        self.scaffold_filter = scaffold_filter
+
         ## feature parameters
         self.pre_transform = pre_transform
         self.in_channels = pre_transform.in_channels # node channel
@@ -133,7 +137,7 @@ class ACANet:
         self.cv_models = []
 
         
-    def _setup(self, train_dataset, alpha, cliff_lower, cliff_upper):
+    def _setup(self, train_dataset, alpha, cliff_lower, cliff_upper, dev_mode=False, **kwargs):
         
         '''
         To setup the PNN-ACANet with ACA loss
@@ -141,13 +145,15 @@ class ACANet:
         deg = get_deg(train_dataset)
         
         model = ACANet_PNA(**self.model_pub_args, deg=deg, ).to(self.device)
-        
+        loss_args = {'fp_filter':kwargs.get('fp_filter', None), 'scaffold_filter':kwargs.get('scaffold_filter', None)}
+        #import ipdb;ipdb.set_trace()
         aca_loss = ACALoss(alpha = alpha, 
                            cliff_lower = cliff_lower, 
                            cliff_upper = cliff_upper, 
-                           dev_mode=False, 
+                           dev_mode=dev_mode, 
                            p = self.p, 
-                           squared = self.squared)
+                           squared = self.squared,
+                           **loss_args)
         
         saver = SaveBestModel(data_transformer = self.smiles_to_data, 
                               save_dir = self.work_dir, 
@@ -220,7 +226,9 @@ class ACANet:
             
             model, optimizer, aca_loss, saver = self._setup(train_dataset, alpha = alpha, 
                                                            cliff_lower = cliff_lower, 
-                                                            cliff_upper = cliff_upper)
+                                                            cliff_upper = cliff_upper,
+                                                            fp_filter = self.fp_filter,
+                                                            scaffold_filter = self.scaffold_filter,)
 
             history = []
             for epoch in tqdm(range(total_epochs), desc='epoch', ascii=True):
@@ -317,7 +325,7 @@ class ACANet:
         res = []
         for cliff_upper in upper_cliffs:
             cliff_lower = 0.1
-            
+            print(cliff_upper)
             rmses = []
             for rp in range(n_repeats):
                 dfcv = self._cv_performance(Xs_train, y_train,
@@ -398,7 +406,7 @@ class ACANet:
         return dfe
 
 
-    def fit(self, Xs_train, y_train, Xs_val = None, y_val = None, verbose = 1, save_model=False):
+    def fit(self, Xs_train, y_train, Xs_val = None, y_val = None, verbose = 1, save_model=False, dev_mode = False):
         
         '''
         Xs_train: list or array of smiles
@@ -418,10 +426,19 @@ class ACANet:
         model, optimizer, aca_loss, saver = self._setup(train_dataset, 
                                                         alpha = self.alpha, 
                                                         cliff_lower = self.cliff_lower, 
-                                                        cliff_upper = self.cliff_upper)
-
+                                                        cliff_upper = self.cliff_upper,
+                                                        dev_mode = dev_mode,
+                                                        fp_filter = self.fp_filter,
+                                                        scaffold_filter = self.scaffold_filter)
         for epoch in range(1, self.epochs+1):
-            train_loss = train(train_loader, model, optimizer, aca_loss, self.device)
+            if dev_mode:
+                train_loss = train(train_loader, model, optimizer, aca_loss, self.device, dev_mode=dev_mode)
+                # print(f"[Train] Loss: {train_loss:.4f}, Reg Loss: {reg_loss:.4f}, TSM Loss: {tsm_loss:.4f} | " \
+                #         f"Mined Triplets: {n_mined_triplets}, Pos Triplets: {n_pos_triplets} | " \
+                #         f"Origin Mined: {n_mined_triplets_origin}, Origin Pos: {n_pos_triplets_origin}")
+
+            else:
+                train_loss = train(train_loader, model, optimizer, aca_loss, self.device, dev_mode=dev_mode)
             if val_loader is None:
                 val_rmse = np.nan
                 saver(train_loss, epoch, model, optimizer)
@@ -502,7 +519,6 @@ class ACANet:
         
         return self
     
-    
     def cv_predict(self, Xs_test):
         '''
         Make prediction for the list of mols
@@ -542,6 +558,29 @@ class ACANet:
     def count_parameters(self):
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 
+
+    def cv_fit_dev(self, Xs_train, y_train, n_folds = 5, verbose=1, random_state = 42, dev_mode=True):
+        '''
+        Fit the model by cross-validation strategy, you will generate the n_fold sub-models for the prediction
+        '''
+
+        splits = self._cv_split(y_train, n_folds = n_folds, random_state = random_state)
+        cv_models = []
+        for i, split in enumerate(splits):
+            inner_train_x = Xs_train[split['inner_train_idx']]
+            inner_train_y = y_train[split['inner_train_idx']]
+            
+            inner_val_x = Xs_train[split['inner_val_idx']]
+            inner_val_y = y_train[split['inner_val_idx']]
+            self.fit(inner_train_x, inner_train_y, 
+                     inner_val_x, inner_val_y, 
+                     verbose=verbose, dev_mode=dev_mode)
+            
+            cv_models.append(self.model)
+            
+        self.cv_models = cv_models
+        
+        return self
     
     
     
