@@ -234,8 +234,14 @@ class Gen39AtomFeatures_full(object):
         arr = np.zeros((1024,))
         AllChem.DataStructs.ConvertToNumpyArray(fp, arr)
         fp = torch.tensor(arr, dtype=torch.int).unsqueeze(0)
+
         scaffold = Chem.MolToSmiles(MurckoScaffold.GetScaffoldForMol(mol))
+        scaffold_fp = AllChem.GetMorganFingerprintAsBitVect(Chem.MolFromSmiles(scaffold), radius=2, nBits=1024)
+        scaffold_arr = np.zeros((1024,))
+        AllChem.DataStructs.ConvertToNumpyArray(scaffold_fp, scaffold_arr)
+        scaffold_fp = torch.tensor(scaffold_fp, dtype=torch.int).unsqueeze(0)
 
         data.fp = fp
         data.scaffold = scaffold
+        data.scaffold_fp = scaffold_fp
         return data
