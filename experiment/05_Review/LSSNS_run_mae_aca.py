@@ -21,12 +21,14 @@ for dataset_name in datasets:
     X = df.Smiles.values
     y = df['pChEMBL Value'].values
 
-    clf = ACANet(gpuid = 0,  squared=False,  pre_transform=Gen39AtomFeatures_full(), work_dir = save_dir,fp_filter=True, scaffold_filter=True) ## scaffold_filter, fp_filter
+    clf = ACANet(gpuid = 0,  squared=False,  pre_transform=Gen39AtomFeatures_full(), work_dir = save_dir, scaffold_filter=True, fp_filter=True, smiles_filter=True) ## scaffold_filter, fp_filter
     #dfp = clf.opt_cliff_by_trps(X, y, iterations=5)
     
-    ## 5FCV performance
-    dfp = clf.opt_cliff_by_cv(X, y, total_epochs=800, n_repeats=3)
-    dfa = clf.opt_alpha_by_cv(X, y, total_epochs=800, n_repeats=10, save_rawdata=True)
+    ## :FIND BEST PARAMs
+    # dfp = clf.opt_cliff_by_cv(X, y, total_epochs=800, n_repeats=3)
+    # dfa = clf.opt_alpha_by_cv(X, y, total_epochs=800, n_repeats=10, save_rawdata=True)
     # dfp = clf.opt_cliff_by_cv(X, y, total_epochs=5, n_repeats=1)
     # dfa = clf.opt_alpha_by_cv(X, y, total_epochs=5, n_repeats=1, save_rawdata=True)
+
+    ## 5FCV performance
     clf.cv_fit_dev(X, y, verbose=1, dev_mode=True)

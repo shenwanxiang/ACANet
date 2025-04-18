@@ -45,7 +45,7 @@ class ACANet:
                  p = 2.0,
                  fp_filter = None,
                  scaffold_filter =None,
-                 
+                 smiles_filter=None,
                  #feature parameters
                  pre_transform = Gen39AtomFeatures,
                  
@@ -94,7 +94,7 @@ class ACANet:
         self.p = p
         self.fp_filter = fp_filter
         self.scaffold_filter = scaffold_filter
-
+        self.smiles_filter = smiles_filter
         ## feature parameters
         self.pre_transform = pre_transform
         self.in_channels = pre_transform.in_channels # node channel
@@ -145,7 +145,7 @@ class ACANet:
         deg = get_deg(train_dataset)
         
         model = ACANet_PNA(**self.model_pub_args, deg=deg, ).to(self.device)
-        loss_args = {'fp_filter':kwargs.get('fp_filter', None), 'scaffold_filter':kwargs.get('scaffold_filter', None)}
+        loss_args = {'fp_filter':kwargs.get('fp_filter', None), 'scaffold_filter':kwargs.get('scaffold_filter', None), 'smiles_filter':kwargs.get('smiles_filter', None)}
         #import ipdb;ipdb.set_trace()
         aca_loss = ACALoss(alpha = alpha, 
                            cliff_lower = cliff_lower, 
@@ -228,7 +228,8 @@ class ACANet:
                                                            cliff_lower = cliff_lower, 
                                                             cliff_upper = cliff_upper,
                                                             fp_filter = self.fp_filter,
-                                                            scaffold_filter = self.scaffold_filter,)
+                                                            scaffold_filter = self.scaffold_filter,
+                                                            smiles_filter = self.smiles_filter)
 
             history = []
             for epoch in tqdm(range(total_epochs), desc='epoch', ascii=True):
@@ -429,7 +430,8 @@ class ACANet:
                                                         cliff_upper = self.cliff_upper,
                                                         dev_mode = dev_mode,
                                                         fp_filter = self.fp_filter,
-                                                        scaffold_filter = self.scaffold_filter)
+                                                        scaffold_filter = self.scaffold_filter,
+                                                        smiles_filter = self.smiles_filter)
         for epoch in range(1, self.epochs+1):
             if dev_mode:
                 train_loss = train(train_loader, model, optimizer, aca_loss, self.device, dev_mode=dev_mode)

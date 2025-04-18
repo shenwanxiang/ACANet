@@ -21,7 +21,7 @@ def pIC50_to_y(pIC50):
     return y
 
 
-for dataset_name in ['CHEMBL4203_Ki']: #['CHEMBL4203_Ki']:
+for dataset_name in datasets: #['CHEMBL4203_Ki']:
     save_dir = './benchmark_performance/mae_aca_opt_cliff/%s' % dataset_name
     df = pd.read_csv('/mnt/cc/0_ACANet/ACANet/experiment/05_Review/MPCD/dataset/HSSMS/MoleculeACE_benchmark/%s.csv' % dataset_name)
     
@@ -33,10 +33,11 @@ for dataset_name in ['CHEMBL4203_Ki']: #['CHEMBL4203_Ki']:
     y_train_pIC50 = y_to_pIC50(y_train)
 
     ## get loss parameters by training set
-    clf = ACANet(gpuid = 0,   work_dir = save_dir, pre_transform=Gen39AtomFeatures_full(), scaffold_filter=True) ## scaffold_filter, fp_filter
+    clf = ACANet(gpuid = 0,   work_dir = save_dir, pre_transform=Gen39AtomFeatures_full(), scaffold_filter=True, fp_filter=True, smiles_filter=True) ## scaffold_filter, fp_filter
     #dfp = clf.opt_cliff_by_trps(Xs_train, y_train_pIC50, iterations=5)
-    dfp = clf.opt_cliff_by_cv(Xs_train, y_train_pIC50, total_epochs=50, n_repeats=3)
-    dfa = clf.opt_alpha_by_cv(Xs_train, y_train_pIC50, total_epochs=100, n_repeats=3)
+    ## :FIND BEST PARAMs
+    # dfp = clf.opt_cliff_by_cv(Xs_train, y_train_pIC50, total_epochs=50, n_repeats=3)
+    # dfa = clf.opt_alpha_by_cv(Xs_train, y_train_pIC50, total_epochs=100, n_repeats=3)
     # dfp = clf.opt_cliff_by_cv(Xs_train, y_train_pIC50, total_epochs=5, n_repeats=1)
     # dfa = clf.opt_alpha_by_cv(Xs_train, y_train_pIC50, total_epochs=5, n_repeats=1)
     
