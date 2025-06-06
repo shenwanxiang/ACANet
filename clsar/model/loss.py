@@ -9,15 +9,13 @@ Created on Mon Sep 17 11:08:35 2022
 import torch
 from torch import Tensor
 import torch.nn as nn
-from torch.nn.modules.loss import _Loss
+from torch.nn.modules.loss import _Loss 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 # from Levenshtein import distance as levenshtein_distance
 
-import torch
-from torch import Tensor
-from torch.nn import _Loss
+
 from rdkit import DataStructs
 
 
@@ -62,7 +60,7 @@ class ACALoss(_Loss):
                  similarity_gate: bool = False,
                  similarity_neg: float = 0.8,
                  similarity_pos: float = 0.2,
-                 dev_mode: bool = True):
+                 dev_mode: bool = False):
         super(ACALoss, self).__init__(alpha)
         self.alpha = alpha
         self.cliff_lower = cliff_lower
@@ -225,7 +223,6 @@ def get_structure_mask(fingerprints: list,
     final_mask = mask & distinct_idx          # [B, B, B]
     return final_mask  # 布尔型张量
 
-
 def _aca_loss(labels: torch.Tensor,
               predictions: torch.Tensor,
               embeddings: torch.Tensor,
@@ -241,92 +238,73 @@ def _aca_loss(labels: torch.Tensor,
               dev_mode: bool = True,
               **kwargs):
     """
-    ACALoss 的核心实现，结合回归损失与三元组“软 margin”对比损失：
-    - labels:     [B] 张量，真实活性
-    - predictions:[B] 张量，模型预测活性
-    - embeddings: [B, E] 张量，模型输出的潜空间向量
-    - fingerprints: 长度为 B 的 Python list，每个元素是 RDKit 指纹 (ExplicitBitVect)
-    - alpha: ACA 权重
-    - cliff_lower / cliff_upper: 活性差阈值
-    - similarity_gate: 是否启用结构相似度过滤
-    - similarity_neg / similarity_pos: 结构过滤的上下阈值
-    - squared: 是否使用平方回归误差 (MSE)；否则使用 MAE
-    - p: cdist 的 p 范数
-    - dev_mode: 如果 True，则返回额外的统计信息
-    返回:
-      如果 dev_mode=True，返回 (loss, reg_loss, tsm_loss, N_Y_ACTs, N_S_ACTs, N_ACTs, N_HV_ACTs)
-      否则只返回 loss
+    ...（省略前面部分）...
     """
+
     device = embeddings.device
     B = labels.shape[0]
 
-    # 1. 计算回归损失（MAE 或 MSE）
+    # 1. 回归损失
     if squared:
         reg_loss = torch.mean((labels - predictions).abs() ** 2)
     else:
         reg_loss = torch.mean((labels - predictions).abs())
 
-    # 2. 计算标签之间的成对距离，用于“软 margin”
-    #    labels_dist: [B, B] 或 [B, B] 的平方距离
+    # 2. 计算标签成对距离，用于 soft‐margin
     labels_dist = pairwise_distance(labels.unsqueeze(1), p=p, squared=squared)  # [B, B]
     margin_pos = labels_dist.unsqueeze(2)  # [B, B, 1]
     margin_neg = labels_dist.unsqueeze(1)  # [B, 1, B]
     margin = margin_neg - margin_pos       # [B, B, B]
 
-    # 3. 计算 embeddings (潜空间) 之间的成对距离
+    # 3. 计算 embeddings 的成对距离
     pairwise_dis = pairwise_distance(embeddings, p=p, squared=squared)  # [B, B]
     anchor_positive_dist = pairwise_dis.unsqueeze(2)  # [B, B, 1]
     anchor_negative_dist = pairwise_dis.unsqueeze(1)  # [B, 1, B]
     triplet_loss_matrix = anchor_positive_dist - anchor_negative_dist + margin  # [B, B, B]
 
-    # 4. 构造“标签过滤”掩码 (mask_by_y)
+    # 4. 构造“标签掩码”（保持为 bool 类型）
     mask_by_y = get_label_mask(labels=labels,
                                device=device,
                                cliff_lower=cliff_lower,
-                               cliff_upper=cliff_upper).float()  # [B, B, B]
-    N_Y_ACTs = torch.sum(mask_by_y)  # 仅根据标签挖到的三元组总数
+                               cliff_upper=cliff_upper)  # [B, B, B], bool
+    N_Y_ACTs = int(mask_by_y.sum().item())
 
-    # 5. 如果开启结构过滤 (similarity_gate)，构造“结构过滤”掩码 (mask_by_s)，否则将其设为全 1
+    # 5. 构造“结构掩码”（如果 similarity_gate=True，则使用；否则直接设为全 True）
     if similarity_gate:
         mask_by_s = get_structure_mask(fingerprints=fingerprints,
                                        device=device,
                                        similarity_neg=similarity_neg,
-                                       similarity_pos=similarity_pos).float()  # [B, B, B]
+                                       similarity_pos=similarity_pos)  # [B, B, B], bool
     else:
-        # 如果不做结构过滤，则 mask_by_s 全为 1，意味着 “不动它”
-        mask_by_s = torch.ones_like(mask_by_y)  # [B, B, B]
+        mask_by_s = torch.ones_like(mask_by_y, dtype=torch.bool)  # 全 True
 
-    # 5.1 统计仅结构过滤时可挖到的三元组数量（开发时用，dev_mode=False 可不关心）
-    N_S_ACTs = torch.sum(mask_by_s)  # 仅根据结构过滤时的三元组数量
+    N_S_ACTs = int(mask_by_s.sum().item())
 
-    # 6. 将标签过滤和结构过滤结合，得到最终挖到的三元组掩码
-    mask_full = (mask_by_y & mask_by_s).float()  # [B, B, B]
-    N_ACTs = torch.sum(mask_full)  # 已实际挖到的三元组数量
+    # 6. 将标签掩码与结构掩码结合（先保持为 bool，再转成 float）
+    mask_full_bool = mask_by_y & mask_by_s          # [B, B, B], bool
+    mask_full = mask_full_bool.float()               # [B, B, B], float
+    N_ACTs = int(mask_full.sum().item())
 
-    # 7. 根据掩码计算 TSM 损失
+    # 7. 根据 mask_full 计算 TSM 损失
     if N_ACTs == 0:
-        # 没有任何三元组 => 只用回归损失
         tsm_loss = torch.tensor(0.0, device=device)
         loss = reg_loss
-        # 如果 dev_mode=True，则 N_HV_ACTs 也设为 0
-        N_HV_ACTs = torch.tensor(0.0, device=device)
+        N_HV_ACTs = 0
     else:
-        # 先把不需要的 triplet_loss 项目置零，再取正部分之和
         triplet_loss_masked = mask_full * triplet_loss_matrix  # [B, B, B]
-        triplet_loss_masked = torch.maximum(triplet_loss_masked,
-                                            torch.tensor(0.0, device=device))
-        tsm_loss = torch.sum(triplet_loss_masked) / N_ACTs
+        triplet_loss_masked = torch.clamp(triplet_loss_masked, min=0.0)
+        tsm_loss = triplet_loss_masked.sum() / N_ACTs
         loss = reg_loss + alpha * tsm_loss
 
-        # 统计“正的三元组损失项”的个数（即“high-value active triplets”）
         pos_triplets = (triplet_loss_masked > 1e-16).float()
-        N_HV_ACTs = torch.sum(pos_triplets)
+        N_HV_ACTs = int(pos_triplets.sum().item())
 
     # 8. 返回结果
     if dev_mode:
         return loss, reg_loss, tsm_loss, N_Y_ACTs, N_S_ACTs, N_ACTs, N_HV_ACTs
     else:
         return loss
+
     
 
 def get_best_cliff(labels: torch.Tensor,
@@ -410,8 +388,10 @@ def get_best_cliff_batch(train_dataset,
     return lower_mode, upper_mode
 
 
-# ——————————————————————————————————————————————————————————————————————————————
-def get_best_structure(fingerprints: list,
+get_best_label_threshold = get_best_cliff
+get_best_label_batch = get_best_cliff_batch
+
+def get_best_structure_threshold(fingerprints: list,
                        neg_thresholds: list = list(torch.arange(0.5, 1.0, 0.05).tolist()),
                        pos_thresholds: list = list(torch.arange(0.0, 0.5, 0.05).tolist()),
                        device: torch.device = torch.device('cpu')):
@@ -490,7 +470,7 @@ def get_best_structure_batch(train_dataset,
         for data in loader:
             # 假设 data.fp 是一个长度为 batch_size 的指纹列表
             fps = data.fp
-            neg, pos, _ = get_best_structure(
+            neg, pos, _ = get_best_structure_threshold(
                 fingerprints=fps,
                 neg_thresholds=neg_thresholds,
                 pos_thresholds=pos_thresholds,

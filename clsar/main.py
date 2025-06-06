@@ -15,7 +15,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from torch import Tensor
-from torch.nn.modules.loss import _Loss          
+         
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import global_mean_pool, global_max_pool
 from torch_geometric.data import Data
@@ -37,7 +37,7 @@ def get_morgan_fingerprint(mol, radius=2, nBits=2048):
 # 注意：下面这些导入需要在 clsar/model 中已经实现过
 from clsar.feature import Gen39AtomFeatures  # node/edge feature transformer
 from clsar.model.model import ACANet_PNA, get_deg, _fix_reproducibility
-from clsar.model.loss import ACALoss, get_best_cliff, get_best_structure
+from clsar.model.loss import ACALoss, get_best_cliff, get_best_structure_threshold
 from clsar.model.saver import SaveBestModel
 from clsar.model.train import train, test, predict
 
