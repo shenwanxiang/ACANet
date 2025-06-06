@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 # from Levenshtein import distance as levenshtein_distance
-
+from torch_geometric.loader import DataLoader
 
 from rdkit import DataStructs
 
@@ -530,4 +530,4 @@ def get_best_structure_batch(train_dataset,
     neg_mode = df_pairs['neg'].mode().iloc[0]
     pos_mode = df_pairs[df_pairs['neg'] == neg_mode]['pos'].mode().iloc[0]
 
-    return neg_mode, pos_mode
+    return neg_mode, pos_mode, df_pairs
