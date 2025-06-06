@@ -223,6 +223,7 @@ def get_structure_mask(fingerprints: list,
     final_mask = mask & distinct_idx          # [B, B, B]
     return final_mask  # 布尔型张量
 
+
 def _aca_loss(labels: torch.Tensor,
               predictions: torch.Tensor,
               embeddings: torch.Tensor,
@@ -238,72 +239,119 @@ def _aca_loss(labels: torch.Tensor,
               dev_mode: bool = True,
               **kwargs):
     """
-    ...（省略前面部分）...
+    Compute ACA loss = regression loss + alpha * triplet‐soft‐margin loss.
+
+    Arguments:
+        labels: [B] or [B,1] tensor of true values.
+        predictions: [B] or [B,1] tensor of predicted values.
+        embeddings: [B, E] tensor of latent vectors.
+        fingerprints: list of length B (each an RDKit ExplicitBitVect).
+        alpha: weight for the triplet loss term.
+        cliff_lower: threshold below which (|Δy| < cliff_lower) defines hard positives.
+        cliff_upper: threshold at or above which (|Δy| ≥ cliff_upper) defines hard negatives.
+        similarity_gate: if True, apply structural‐similarity filtering.
+        similarity_neg: Tanimoto threshold for positives/negatives (sim > similarity_neg).
+        similarity_pos: Tanimoto threshold for negatives (sim < similarity_pos).
+        squared: if True, use squared distances for both MSE and triplet; else use MAE.
+        p: p‐norm for torch.cdist.
+        dev_mode: if True, return extra statistics.
+
+    Returns:
+        If dev_mode=True:
+            (loss, reg_loss, tsm_loss, N_Y_ACTs, N_S_ACTs, N_ACTs, N_HV_ACTs)
+        Else:
+            loss
     """
-
     device = embeddings.device
-    B = labels.shape[0]
+    # Flatten labels to shape [B]
+    labels_flat = labels.view(-1)
+    B = labels_flat.size(0)
 
-    # 1. 回归损失
+    # 1. Regression loss (MAE or MSE)
     if squared:
-        reg_loss = torch.mean((labels - predictions).abs() ** 2)
+        reg_loss = torch.mean((labels_flat - predictions.view(-1)).abs() ** 2)
     else:
-        reg_loss = torch.mean((labels - predictions).abs())
+        reg_loss = torch.mean((labels_flat - predictions.view(-1)).abs())
 
-    # 2. 计算标签成对距离，用于 soft‐margin
-    labels_dist = pairwise_distance(labels.unsqueeze(1), p=p, squared=squared)  # [B, B]
+    # 2. Compute pairwise label distances for margin
+    #    labels_flat.unsqueeze(1): [B, 1], labels_flat.unsqueeze(0): [1, B]
+    labels_dist = torch.abs(labels_flat.unsqueeze(1) - labels_flat.unsqueeze(0))  # [B, B]
     margin_pos = labels_dist.unsqueeze(2)  # [B, B, 1]
     margin_neg = labels_dist.unsqueeze(1)  # [B, 1, B]
     margin = margin_neg - margin_pos       # [B, B, B]
 
-    # 3. 计算 embeddings 的成对距离
-    pairwise_dis = pairwise_distance(embeddings, p=p, squared=squared)  # [B, B]
-    anchor_positive_dist = pairwise_dis.unsqueeze(2)  # [B, B, 1]
-    anchor_negative_dist = pairwise_dis.unsqueeze(1)  # [B, 1, B]
-    triplet_loss_matrix = anchor_positive_dist - anchor_negative_dist + margin  # [B, B, B]
+    # 3. Compute pairwise embedding distances
+    pairwise_dis = torch.cdist(embeddings, embeddings, p=p)  # [B, B]
+    if squared:
+        pairwise_dis = pairwise_dis ** 2
+    anchor_pos_dist = pairwise_dis.unsqueeze(2)  # [B, B, 1]
+    anchor_neg_dist = pairwise_dis.unsqueeze(1)  # [B, 1, B]
+    triplet_loss_matrix = anchor_pos_dist - anchor_neg_dist + margin  # [B, B, B]
 
-    # 4. 构造“标签掩码”（保持为 bool 类型）
-    mask_by_y = get_label_mask(labels=labels,
-                               device=device,
-                               cliff_lower=cliff_lower,
-                               cliff_upper=cliff_upper)  # [B, B, B], bool
+    # 4. Build “label‐based” triplet mask (bool)
+    #    Condition: i≠j≠k, |y_i - y_j| < cliff_lower (positive), |y_i - y_k| ≥ cliff_upper (negative)
+    idx = torch.arange(B, device=device)
+    eq = idx.unsqueeze(0) == idx.unsqueeze(1)  # [B, B]
+    neq = ~eq                                  # [B, B]
+    i_ne_j = neq.unsqueeze(2)                  # [B, B, 1]
+    i_ne_k = neq.unsqueeze(1)                  # [B, 1, B]
+    j_ne_k = neq.unsqueeze(0)                  # [1, B, B]
+    distinct = i_ne_j & i_ne_k & j_ne_k        # [B, B, B]
+
+    hard_pos = labels_dist < cliff_lower        # [B, B]
+    hard_neg = labels_dist >= cliff_upper       # [B, B]
+    pos_3d = hard_pos.unsqueeze(2)              # [B, B, 1]
+    neg_3d = hard_neg.unsqueeze(1)              # [B, 1, B]
+    mask_by_y = distinct & (pos_3d & neg_3d)   # [B, B, B], bool
     N_Y_ACTs = int(mask_by_y.sum().item())
 
-    # 5. 构造“结构掩码”（如果 similarity_gate=True，则使用；否则直接设为全 True）
+    # 5. Build “structure‐based” mask if requested; else all True
     if similarity_gate:
-        mask_by_s = get_structure_mask(fingerprints=fingerprints,
-                                       device=device,
-                                       similarity_neg=similarity_neg,
-                                       similarity_pos=similarity_pos)  # [B, B, B], bool
+        mask_by_s = get_structure_mask(
+            fingerprints=fingerprints,
+            device=device,
+            similarity_neg=similarity_neg,
+            similarity_pos=similarity_pos
+        )  # [B, B, B], bool
     else:
-        mask_by_s = torch.ones_like(mask_by_y, dtype=torch.bool)  # 全 True
-
+        mask_by_s = torch.ones_like(mask_by_y, dtype=torch.bool)
     N_S_ACTs = int(mask_by_s.sum().item())
 
-    # 6. 将标签掩码与结构掩码结合（先保持为 bool，再转成 float）
-    mask_full_bool = mask_by_y & mask_by_s          # [B, B, B], bool
-    mask_full = mask_full_bool.float()               # [B, B, B], float
-    N_ACTs = int(mask_full.sum().item())
+    # 6. Combine label and structure masks
+    mask_full_bool = mask_by_y & mask_by_s  # [B, B, B], bool
+    N_ACTs = int(mask_full_bool.sum().item())
 
-    # 7. 根据 mask_full 计算 TSM 损失
+    # 7. Compute TSM loss on masked triplets
     if N_ACTs == 0:
         tsm_loss = torch.tensor(0.0, device=device)
         loss = reg_loss
         N_HV_ACTs = 0
     else:
-        triplet_loss_masked = mask_full * triplet_loss_matrix  # [B, B, B]
+        # Zero out entries not in mask_full_bool
+        triplet_loss_masked = torch.zeros_like(triplet_loss_matrix)
+        triplet_loss_masked[mask_full_bool] = triplet_loss_matrix[mask_full_bool]
+        # Clamp negatives to zero
         triplet_loss_masked = torch.clamp(triplet_loss_masked, min=0.0)
+
         tsm_loss = triplet_loss_masked.sum() / N_ACTs
         loss = reg_loss + alpha * tsm_loss
 
-        pos_triplets = (triplet_loss_masked > 1e-16).float()
-        N_HV_ACTs = int(pos_triplets.sum().item())
+        # Count how many masked triplets have positive loss
+        pos_triplets_bool = triplet_loss_masked > 1e-16  # [B, B, B], bool
+        N_HV_ACTs = int((pos_triplets_bool & mask_full_bool).sum().item())
 
-    # 8. 返回结果
+    # 8. Return results
     if dev_mode:
         return loss, reg_loss, tsm_loss, N_Y_ACTs, N_S_ACTs, N_ACTs, N_HV_ACTs
     else:
         return loss
+
+
+# N_Y_ACTs = mask_by_y.sum()
+# N_S_ACTs = mask_by_s.sum()
+# N_ACTs = (mask_by_y & mask_by_s).sum()
+# N_HV_ACTs = ((triplet_loss_masked > 0) & mask_full_bool).sum()
+
 
     
 
