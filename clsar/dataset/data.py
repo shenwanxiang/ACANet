@@ -11,11 +11,16 @@ import pandas as pd
 import numpy as np
 import re
 from rdkit import Chem
-from rdkit.Chem.Scaffolds import MurckoScaffold
-from rdkit.Chem import AllChem
 import torch
 from torch_geometric.data import (InMemoryDataset, Data, download_url,
                                   extract_gz)
+
+from rdkit.Chem import rdMolDescriptors
+
+def get_morgan_fingerprint(mol, radius=2, nBits=2048):
+    """Calculates a Morgan fingerprint for a given RDKit Mol."""
+    return rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=radius, nBits=nBits)
+
 
 
 class LSSNS(InMemoryDataset):
@@ -106,7 +111,7 @@ class LSSNS(InMemoryDataset):
             mol = Chem.MolFromSmiles(smiles)
             if mol is None:
                 continue
-
+            fp = get_morgan_fingerprint(mol)
             xs = []
             for atom in mol.GetAtoms():
                 x = []
@@ -147,16 +152,8 @@ class LSSNS(InMemoryDataset):
                 perm = (edge_index[0] * x.size(0) + edge_index[1]).argsort()
                 edge_index, edge_attr = edge_index[:, perm], edge_attr[perm]
 
-            # Add fingerprint for structure similarity calculation
-            fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
-            arr = np.zeros((2048,))
-            AllChem.DataStructs.ConvertToNumpyArray(fp, arr)
-            fp = torch.tensor(arr, dtype=torch.int)
-            scaffold = Chem.MolToSmiles(MurckoScaffold.GetScaffoldForMol(mol))
-
-            data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, fp=fp, scaffold=scaffold,
-                        y=y, smiles=smiles)
-
+            data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y,
+                        smiles=smiles, fp=fp)
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
@@ -181,7 +178,7 @@ class LSSNS(InMemoryDataset):
             mol = Chem.AddHs(mol)
             if mol is None:
                 continue
-
+            fp = get_morgan_fingerprint(mol)
             xs = []
             for atom in mol.GetAtoms():
                 x = []
@@ -223,7 +220,7 @@ class LSSNS(InMemoryDataset):
                 edge_index, edge_attr = edge_index[:, perm], edge_attr[perm]
 
             data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr,
-                        smiles=smiles)
+                        smiles=smiles, fp = fp)
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
@@ -322,7 +319,7 @@ class HSSMS(LSSNS):
             mol = Chem.MolFromSmiles(smiles)
             if mol is None:
                 continue
-
+            fp = get_morgan_fingerprint(mol)
             xs = []
             for atom in mol.GetAtoms():
                 x = []
@@ -363,24 +360,15 @@ class HSSMS(LSSNS):
                 perm = (edge_index[0] * x.size(0) + edge_index[1]).argsort()
                 edge_index, edge_attr = edge_index[:, perm], edge_attr[perm]
 
-            # Add fingerprint for structure similarity calculation
-            fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
-            arr = np.zeros((2048,))
-            AllChem.DataStructs.ConvertToNumpyArray(fp, arr)
-            fp = torch.tensor(arr, dtype=torch.int)
-            scaffold = Chem.MolToSmiles(MurckoScaffold.GetScaffoldForMol(mol))
-
             data = Data(x=x,
                         edge_index=edge_index,
                         edge_attr=edge_attr,
-                        fp=fp,
-                        scaffold=scaffold,
                         y=y,
                         cliff=cliff,
                         split=split,
                         y_nm=y_nm,
                         y_nm_lg=y_nm_lg,
-                        smiles=smiles)
+                        smiles=smiles, fp=fp)
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
