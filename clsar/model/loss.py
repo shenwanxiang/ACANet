@@ -18,38 +18,26 @@ from torch_geometric.loader import DataLoader
 
 from rdkit import DataStructs
 
-
 class ACALoss(_Loss):
-    r"""Creates a criterion that measures the activity cliff awareness (ACA) loss given input
-    tensors :math:`labels`, :math:`predictions`, :math:`embeddings` and optional fingerprints,
-    an awareness factor :math:`\alpha` and two cliff parameters :math:`cliff_lower` and :math:`cliff_upper`.
-
-    This loss combines a standard regression loss (MAE or MSE) with a triplet‐soft‐margin (TSM) loss
-    to emphasize “activity cliffs” in latent space.  See the docstring for `_aca_loss` for details.
+    r"""Criterion for Activity Cliff Awareness (ACA) loss.
+    Combines a regression loss (MAE or MSE) with a triplet-soft-margin loss
+    to emphasize activity cliffs in latent space.
 
     Args:
-        alpha (float, optional): weight of the TSM term. Default: 0.1.
-        cliff_lower (float, optional): minimum |Δy| for a “hard positive” pair. Default: 1.0.
-        cliff_upper (float, optional): maximum |Δy| for a “hard positive” (and threshold for “hard negative”). Default: 1.0.
-        squared (bool, optional): if True, use MSE for regression loss; otherwise MAE. Also squares the distances in TSM. Default: False.
-        p (float, optional): p‐norm to use in torch.cdist for computing distances. Default: 2.0.
-        similarity_gate (bool, optional): if True, require structural‐similarity gating (Tanimoto thresholds). Default: False.
-        similarity_neg (float, optional): Tanimoto threshold for “hard positive”/“hard negative” gating (sim > similarity_neg). Default: 0.8.
-        similarity_pos (float, optional): Tanimoto threshold below which a pair is considered “dissimilar” (sim < similarity_pos) for negative sampling. Default: 0.2.
-        dev_mode (bool, optional): if True, forward returns extra statistics: (loss, reg_loss, tsm_loss, N_Y_ACTs, N_S_ACTs, N_ACTs, N_HV_ACTs). If False, returns only the total loss. Default: True.
+        alpha: weight of the triplet loss term.
+        cliff_lower: threshold for hard-positive in label space.
+        cliff_upper: threshold for hard-negative in label space.
+        squared: if True, use MSE; else MAE.
+        p: p-norm for embedding distance.
+        similarity_gate: if True, filter triplets by structural similarity.
+        similarity_neg: Tanimoto threshold for positives.
+        similarity_pos: Tanimoto threshold for negatives.
+        gate_type: 'AND' or 'OR' combining label and structure masks.
+        dev_mode: if True, return detailed stats.
     """
 
     __constants__ = ['alpha', 'cliff_lower', 'cliff_upper', 'squared',
-                     'p', 'similarity_gate', 'similarity_neg', 'similarity_pos', 'dev_mode']
-    alpha: float
-    cliff_lower: float
-    cliff_upper: float
-    squared: bool
-    p: float
-    similarity_gate: bool
-    similarity_neg: float
-    similarity_pos: float
-    dev_mode: bool
+                     'p', 'similarity_gate', 'similarity_neg', 'similarity_pos', 'dev_mode', 'gate_type']
 
     def __init__(self,
                  alpha: float = 0.1,
@@ -60,6 +48,7 @@ class ACALoss(_Loss):
                  similarity_gate: bool = False,
                  similarity_neg: float = 0.8,
                  similarity_pos: float = 0.2,
+                 gate_type: str = 'OR',
                  dev_mode: bool = False):
         super(ACALoss, self).__init__(alpha)
         self.alpha = alpha
@@ -70,6 +59,7 @@ class ACALoss(_Loss):
         self.similarity_gate = similarity_gate
         self.similarity_neg = similarity_neg
         self.similarity_pos = similarity_pos
+        self.gate_type = gate_type.upper()
         self.dev_mode = dev_mode
 
     def forward(self,
@@ -77,20 +67,6 @@ class ACALoss(_Loss):
                 predictions: Tensor,
                 embeddings: Tensor,
                 fingerprints: list = None) -> Tensor:
-        """
-        Compute the ACA loss.
-
-        Args:
-            labels: [B] tensor of true values.
-            predictions: [B] tensor of predicted values.
-            embeddings: [B, E] tensor of latent embeddings.
-            fingerprints: list of length B, each an RDKit ExplicitBitVect.
-                          Required if similarity_gate=True; otherwise can be None.
-
-        Returns:
-            If dev_mode=True: (loss, reg_loss, tsm_loss, N_Y_ACTs, N_S_ACTs, N_ACTs, N_HV_ACTs)
-            If dev_mode=False: loss
-        """
         return _aca_loss(
             labels=labels,
             predictions=predictions,
@@ -102,6 +78,7 @@ class ACALoss(_Loss):
             similarity_gate=self.similarity_gate,
             similarity_neg=self.similarity_neg,
             similarity_pos=self.similarity_pos,
+            gate_type=self.gate_type,
             squared=self.squared,
             p=self.p,
             dev_mode=self.dev_mode
@@ -234,6 +211,7 @@ def _aca_loss(labels: torch.Tensor,
               similarity_gate: bool = False,
               similarity_neg: float = 0.8,
               similarity_pos: float = 0.2,
+              gate_type = 'OR',
               squared: bool = False,
               p: float = 2.0,
               dev_mode: bool = True,
@@ -252,6 +230,7 @@ def _aca_loss(labels: torch.Tensor,
         similarity_gate: if True, apply structural‐similarity filtering.
         similarity_neg: Tanimoto threshold for positives/negatives (sim > similarity_neg).
         similarity_pos: Tanimoto threshold for negatives (sim < similarity_pos).
+        gate_type: 
         squared: if True, use squared distances for both MSE and triplet; else use MAE.
         p: p‐norm for torch.cdist.
         dev_mode: if True, return extra statistics.
@@ -316,7 +295,11 @@ def _aca_loss(labels: torch.Tensor,
 
         N_S_ACTs = int(mask_by_s.sum().item())
         # 6. Combine label and structure masks
-        mask_full_bool = mask_by_y & mask_by_s  # [B, B, B], bool
+
+        if gate_type == 'AND':
+            mask_full_bool = mask_by_y & mask_by_s
+        else:
+            mask_full_bool = mask_by_y | mask_by_s  # [B, B, B], bool
         N_ACTs = int(mask_full_bool.sum().item())
         
     else:
