@@ -177,30 +177,30 @@ def get_label_mask(labels: torch.Tensor,
     return mask
 
 
-def get_structure_mask(fingerprints: list,
+def get_structure_mask(fingerprints: torch.Tensor,
                        device: torch.device,
                        similarity_neg: float = 0.8,
                        similarity_pos: float = 0.2,
                        eps: float = 1e-5) -> torch.Tensor:
     """
     构造基于指纹（fingerprint）相似度的三元组掩码：
-    - fingerprints: 长度为 B 的 Python list，每个元素都是 RDKit ExplicitBitVect
+    - fingerprints: BoolTensor，形状 [B, F] torch.tensor unit 8
     - similarity_neg: Tanimoto 阈值，要求 sim(a, j) > similarity_neg 才算“正样本候选”
     - similarity_pos: Tanimoto 阈值，要求 sim(a, k) < similarity_pos 才算“负样本候选”
     返回：布尔型张量 mask，形状 [B, B, B]
     """
-    B = len(fingerprints)
 
-    # 1. 初始化相似度矩阵 [B, B]
-    sim_matrix = torch.zeros((B, B), dtype=torch.float32, device=device)
 
-    # 2. 双重循环计算 Tanimoto 相似度
-    for i in range(B):
-        sim_matrix[i, i] = 1.0
-        for j in range(i + 1, B):
-            sim = DataStructs.TanimotoSimilarity(fingerprints[i], fingerprints[j])
-            sim_matrix[i, j] = sim
-            sim_matrix[j, i] = sim
+    fps = fingerprints.to(device)       # dtype=torch.uint8, shape [B, F]
+    B = fps.size(0)
+    
+    # 1. 交集 ∧ 并集 ∨
+    intersect = (fps.unsqueeze(1) & fps.unsqueeze(0)).sum(-1).float()  # [B, B]
+    union     = (fps.unsqueeze(1) | fps.unsqueeze(0)).sum(-1).float()  # [B, B]
+    
+    # 2. Tanimoto
+    sim_matrix = intersect / (union + 1e-8)   
+
 
     # 3. 构造 “正样本候选” 与 “负样本候选” 的 2D 掩码
     sim_hard_pos = sim_matrix > similarity_neg  # [B, B]: i→j Tanimoto > threshold → 可做“硬正”
@@ -209,7 +209,7 @@ def get_structure_mask(fingerprints: list,
     # 4. 扩展到 3D：dim=1 对应 j，dim=2 对应 k
     pos_3d = sim_hard_pos.unsqueeze(2)  # [B, B, 1]
     neg_3d = sim_hard_neg.unsqueeze(1)  # [B, 1, B]
-    mask = pos_3d & neg_3d              # [B, B, B]
+    mask = pos_3d | neg_3d              # [B, B, B]
 
     # 5. 再加上“索引两两不相等”的约束，保证 i, j, k 三者不同
     idx = torch.arange(B, device=device)
@@ -313,13 +313,18 @@ def _aca_loss(labels: torch.Tensor,
             similarity_neg=similarity_neg,
             similarity_pos=similarity_pos
         )  # [B, B, B], bool
+
+        N_S_ACTs = int(mask_by_s.sum().item())
+        # 6. Combine label and structure masks
+        mask_full_bool = mask_by_y & mask_by_s  # [B, B, B], bool
+        N_ACTs = int(mask_full_bool.sum().item())
+        
     else:
         mask_by_s = torch.ones_like(mask_by_y, dtype=torch.bool)
-    N_S_ACTs = int(mask_by_s.sum().item())
-
-    # 6. Combine label and structure masks
-    mask_full_bool = mask_by_y & mask_by_s  # [B, B, B], bool
-    N_ACTs = int(mask_full_bool.sum().item())
+        N_S_ACTs = int(mask_by_s.sum().item())
+        # 6. Combine label and structure masks
+        mask_full_bool = mask_by_y
+        N_ACTs = int(mask_full_bool.sum().item())
 
     # 7. Compute TSM loss on masked triplets
     if N_ACTs == 0:
