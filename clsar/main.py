@@ -28,13 +28,28 @@ from rdkit import DataStructs
 sns.set(style='white', font='sans-serif', font_scale=2)
 
 
-def get_morgan_fingerprint(mol, radius=2, nBits=2048):
-    """Calculates a Morgan fingerprint for a given RDKit Mol."""
-    return rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=radius, nBits=nBits)
+def get_morgan_fingerprint(mol, radius=2, nBits=2048, device=None):
+    """
+    Calculates a Morgan fingerprint for a given RDKit Mol and returns a
+    [1, nBits] PyTorch tensor of uint8 (0/1).
+    """
+    # 1) Compute the RDKit bit vector
+    fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol,
+                                                        radius=radius,
+                                                        nBits=nBits)
+    # 2) Convert it to a flat NumPy array of shape (nBits,)
+    arr = np.zeros((nBits,), dtype=np.uint8)
+    DataStructs.ConvertToNumpyArray(fp, arr)
 
+    # 3) Turn into a tensor of shape [1, nBits]
+    tensor = torch.from_numpy(arr).unsqueeze(0)  # now shape [1, 2048]
 
-# ——————————————————————————————————————————————————————————————————————————————
-# 注意：下面这些导入需要在 clsar/model 中已经实现过
+    # 4) (Optional) move to device
+    if device is not None:
+        tensor = tensor.to(device)
+
+    return tensor
+
 from clsar.feature import Gen39AtomFeatures  # node/edge feature transformer
 from clsar.model.model import ACANet_PNA, get_deg, _fix_reproducibility
 from clsar.model.loss import ACALoss, get_best_cliff, get_best_structure_threshold
