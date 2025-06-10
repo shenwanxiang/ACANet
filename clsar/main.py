@@ -50,7 +50,7 @@ def get_morgan_fingerprint(mol, radius=2, nBits=2048, device=None):
 
     return tensor
 
-from clsar.feature import Gen39AtomFeatures  # node/edge feature transformer
+from clsar.feature import Gen39AtomFeatures, Gen39AtomFeatures_full # node/edge feature transformer
 from clsar.model.model import ACANet_PNA, get_deg, _fix_reproducibility
 from clsar.model.loss import ACALoss, get_best_cliff, get_best_structure_threshold
 from clsar.model.saver import SaveBestModel
@@ -74,8 +74,8 @@ class ACANet:
 
                  # optional structure‐gating parameters (默认不开启)
                  similarity_gate: bool = False,
-                 similarity_neg: float = 0.8,
-                 similarity_pos: float = 0.2,
+                 similarity_neg: float = 0.9,
+                 similarity_pos: float = 1.0,
 
                  # feature parameters
                  pre_transform=Gen39AtomFeatures(),
@@ -178,34 +178,50 @@ class ACANet:
         return model, optimizer, aca_loss, saver
 
     def smiles_to_data(self, smiles_list):
-        """
-        Convert a list of SMILES strings to a list of PyG Data objects
-        with node/edge features and fingerprint stored in `data.fp`.
-        """
-        data_list = []
+        data_list = [] 
         for smiles in smiles_list:
-            from rdkit import Chem
-            mol = Chem.MolFromSmiles(smiles)
-            fp = get_morgan_fingerprint(mol)
-            data = Data(smiles=smiles, fp=fp)
-            data = self.pre_transform(data)
+            data = self.pre_transform(Data(smiles=smiles)) 
             data_list.append(data)
         return data_list
-
+    
+    
+    
     def _Xy_to_dataset(self, Xs, y):
-        """
-        Convert lists Xs (SMILES) and y (labels) into a list of Data objects.
-        """
         dataset = []
         for smi, _y in zip(Xs, y):
-            from rdkit import Chem
-            mol = Chem.MolFromSmiles(smi)
-            fp = get_morgan_fingerprint(mol)
             y_tensor = torch.tensor([_y], dtype=torch.float).view(1, -1)
-            data = Data(smiles=smi, y=y_tensor, fp=fp)
-            data = self.pre_transform(data)
+            data = self.pre_transform(Data(smiles=smi, y = y_tensor)) 
             dataset.append(data)
         return dataset
+    # def smiles_to_data(self, smiles_list):
+    #     """
+    #     Convert a list of SMILES strings to a list of PyG Data objects
+    #     with node/edge features and fingerprint stored in `data.fp`.
+    #     """
+    #     data_list = []
+    #     for smiles in smiles_list:
+    #         from rdkit import Chem
+    #         mol = Chem.MolFromSmiles(smiles)
+    #         fp = get_morgan_fingerprint(mol)
+    #         data = Data(smiles=smiles, fp=fp)
+    #         data = self.pre_transform(data)
+    #         data_list.append(data)
+    #     return data_list
+
+    # def _Xy_to_dataset(self, Xs, y):
+    #     """
+    #     Convert lists Xs (SMILES) and y (labels) into a list of Data objects.
+    #     """
+    #     dataset = []
+    #     for smi, _y in zip(Xs, y):
+    #         from rdkit import Chem
+    #         mol = Chem.MolFromSmiles(smi)
+    #         fp = get_morgan_fingerprint(mol)
+    #         y_tensor = torch.tensor([_y], dtype=torch.float).view(1, -1)
+    #         data = Data(smiles=smi, y=y_tensor, fp=fp)
+    #         data = self.pre_transform(data)
+    #         dataset.append(data)
+    #     return dataset
 
     def _cv_split(self, y_train, n_folds=5, random_state=42):
         """
@@ -517,7 +533,7 @@ class ACANet:
         Predict on a list of SMILES.
         """
         test_dataset = self.smiles_to_data(Xs_test)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
         test_pred = predict(test_loader, self.model, self.device)
         y_pred = test_pred.cpu().numpy().reshape(-1,)
         return y_pred
@@ -546,7 +562,7 @@ class ACANet:
         """
         assert len(self.cv_models) >= 1, 'Please run cv_fit first!'
         test_dataset = self.smiles_to_data(Xs_test)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
 
         cv_preds = []
         for model in self.cv_models:

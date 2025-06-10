@@ -12,7 +12,7 @@ def train(train_loader, model, optimizer, aca_loss, device):
                            data.edge_attr, data.batch)
 
 
-        loss = aca_loss(data.y, out, embed, data.fp)
+        loss = aca_loss(data.y, out, embed, data.fp, data.scaffold_fp, data.smiles)
         #loss = F.mse_loss(out, data.y)
         loss.backward()
         optimizer.step()

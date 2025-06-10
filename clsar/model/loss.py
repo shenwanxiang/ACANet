@@ -9,11 +9,11 @@ Created on Mon Sep 17 11:08:35 2022
 import torch
 from torch import Tensor
 import torch.nn as nn
-from torch.nn.modules.loss import _Loss 
+from torch.nn.modules.loss import _Loss
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-# from Levenshtein import distance as levenshtein_distance
+from Levenshtein import distance as levenshtein_distance
 from torch_geometric.loader import DataLoader
 
 from rdkit import DataStructs
@@ -66,12 +66,16 @@ class ACALoss(_Loss):
                 labels: Tensor,
                 predictions: Tensor,
                 embeddings: Tensor,
-                fingerprints: list = None) -> Tensor:
+                fingerprints: list,
+                scaffolds,
+                smiles) -> Tensor:
         return _aca_loss(
             labels=labels,
             predictions=predictions,
             embeddings=embeddings,
             fingerprints=fingerprints,
+            scaffolds=scaffolds,
+            smiles=smiles,
             alpha=self.alpha,
             cliff_lower=self.cliff_lower,
             cliff_upper=self.cliff_upper,
@@ -153,11 +157,58 @@ def get_label_mask(labels: torch.Tensor,
 
     return mask
 
+def get_scaffold_mask(scaffold_fps, device, struct_threshold_neg=0.9, struct_threshold_pos=1, eps=1e-5):
+    fps = scaffold_fps
+    assert len(fps.size())==2, 'The FP shape should be [batch, fingerprint_dim]'
+    common = torch.bitwise_and(fps.unsqueeze(0),fps.unsqueeze(1))
+    a_add_b = torch.add(fps.unsqueeze(0),fps.unsqueeze(1))
+    
+    C = common.sum(-1)
+    A_add_B = a_add_b.sum(-1)
+    similarity = C / (A_add_B- C + eps)
+    sim_mask_neg = similarity > struct_threshold_neg
+    sim_mask_pos = similarity < struct_threshold_pos
+    # The same as former triplet mask, dim 'j' denotes positive sample, dim 'k' denotes negative samples
+    mask = torch.logical_and(sim_mask_neg.unsqueeze(2), sim_mask_neg.unsqueeze(1)).to(device)
+    return mask
+    
+def compute_edit_similarity(s1, s2):
+    dist = levenshtein_distance(s1, s2)
+    max_len = max(len(s1), len(s2))
+    if max_len == 0:
+        return 1.0
+    return 1.0 - dist / max_len
+def get_smiles_mask(smiles_list, 
+                    device,
+                    struct_threshold_neg=0.9, 
+                    struct_threshold_pos=1.0, 
+                    ):
+    B = len(smiles_list)
+    
+    edit_sim = torch.zeros(B, B, dtype=torch.float)
+    for i in range(B):
+        for j in range(B):
+            if i == j:
+                edit_sim[i, j] = 1.0
+            else:
+                edit_sim[i, j] = compute_edit_similarity(smiles_list[i], smiles_list[j])
+    
+    neg_mask_2d = edit_sim >= struct_threshold_neg
+    pos_mask_2d = edit_sim < struct_threshold_pos
+    
+    neg_mask_3d = neg_mask_2d.unsqueeze(1)  # shape: [B, 1, B]
+    pos_mask_3d = pos_mask_2d.unsqueeze(2)  # shape: [B, B, 1]
+    
+    mask_3d = torch.logical_and(neg_mask_3d, pos_mask_3d).to(device)
+    return mask_3d
+
 
 def get_structure_mask(fingerprints: torch.Tensor,
+                        scaffolds,
+                        smiles,
                        device: torch.device,
-                       similarity_neg: float = 0.8,
-                       similarity_pos: float = 0.2,
+                       similarity_neg: float = 0.9,
+                       similarity_pos: float = 1,
                        eps: float = 1e-5) -> torch.Tensor:
     """
     构造基于指纹（fingerprint）相似度的三元组掩码：
@@ -197,7 +248,10 @@ def get_structure_mask(fingerprints: torch.Tensor,
     j_ne_k = neq.unsqueeze(0)                # [1, B, B]
     distinct_idx = i_ne_j & i_ne_k & j_ne_k   # [B, B, B]
 
-    final_mask = mask & distinct_idx          # [B, B, B]
+    scaffold_mask = get_scaffold_mask(scaffold_fps=scaffolds, device=device, struct_threshold_neg=similarity_neg, struct_threshold_pos=similarity_pos)
+    smiles_mask = get_smiles_mask(smiles, device=device)
+
+    final_mask = (mask | scaffold_mask | smiles_mask) & distinct_idx     # [B, B, B]
     return final_mask  # 布尔型张量
 
 
@@ -205,6 +259,8 @@ def _aca_loss(labels: torch.Tensor,
               predictions: torch.Tensor,
               embeddings: torch.Tensor,
               fingerprints: list,
+              scaffolds,
+              smiles,
               alpha: float = 0.1,
               cliff_lower: float = 0.2,
               cliff_upper: float = 1.0,
@@ -288,6 +344,8 @@ def _aca_loss(labels: torch.Tensor,
     if similarity_gate:
         mask_by_s = get_structure_mask(
             fingerprints=fingerprints,
+            scaffolds=scaffolds,
+            smiles=smiles,
             device=device,
             similarity_neg=similarity_neg,
             similarity_pos=similarity_pos
@@ -460,6 +518,8 @@ def get_best_structure_threshold(fingerprints: list,
 
             mask = get_structure_mask(
                 fingerprints=fingerprints,
+                scaffolds=scaffolds,
+                smiles=smiles,
                 device=device,
                 similarity_neg=neg,
                 similarity_pos=pos
