@@ -231,13 +231,13 @@ def get_structure_mask(fingerprints: torch.Tensor,
 
 
     # 3. 构造 “正样本候选” 与 “负样本候选” 的 2D 掩码
-    sim_hard_pos = sim_matrix > similarity_neg  # [B, B]: i→j Tanimoto > threshold → 可做“硬正”
-    sim_hard_neg = sim_matrix < similarity_pos  # [B, B]: i→k Tanimoto < threshold → 可做“硬负”
+    sim_hard_neg = sim_matrix > similarity_neg  # [B, B]: i→j Tanimoto > threshold → 可做“硬正”
+    sim_hard_pos = sim_matrix < similarity_pos  # [B, B]: i→k Tanimoto < threshold → 可做“硬负”
 
     # 4. 扩展到 3D：dim=1 对应 j，dim=2 对应 k
-    pos_3d = sim_hard_pos.unsqueeze(2)  # [B, B, 1]
     neg_3d = sim_hard_neg.unsqueeze(1)  # [B, 1, B]
-    mask = pos_3d | neg_3d              # [B, B, B]
+    pos_3d = sim_hard_pos.unsqueeze(2)  # [B, B, 1]
+    mask = pos_3d & neg_3d              # [B, B, B]
 
     # 5. 再加上“索引两两不相等”的约束，保证 i, j, k 三者不同
     idx = torch.arange(B, device=device)
