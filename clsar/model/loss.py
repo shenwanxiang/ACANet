@@ -269,7 +269,7 @@ def get_structure_mask(fps_smiles: torch.Tensor,
     j_ne_k = neq.unsqueeze(0)                # [1, B, B]
     distinct_idx = i_ne_j & i_ne_k & j_ne_k   # [B, B, B]
     
-    final_mask = (fp_mask | scaffold_mask | smiles_mask) & distinct_idx     # [B, B, B]
+    final_mask = (fingerprint_mask | scaffold_mask | smiles_mask) & distinct_idx     # [B, B, B]
     
     return final_mask  # 布尔型张量
 
