@@ -15,7 +15,7 @@ import pandas as pd
 from tqdm import tqdm
 from Levenshtein import distance as levenshtein_distance
 from torch_geometric.loader import DataLoader
-
+from typing import Optional, List
 from rdkit import DataStructs
 
 class ACALoss(_Loss):
@@ -46,9 +46,9 @@ class ACALoss(_Loss):
                  squared: bool = False,
                  p: float = 2.0,
                  similarity_gate: bool = False,
-                 similarity_neg: float = 0.8,
-                 similarity_pos: float = 0.2,
-                 gate_type: str = 'OR',
+                 similarity_neg: float = 0.9,
+                 similarity_pos: float = 0.1,
+                 gate_type: str = 'AND',
                  dev_mode: bool = False):
         super(ACALoss, self).__init__(alpha)
         self.alpha = alpha
@@ -66,16 +66,21 @@ class ACALoss(_Loss):
                 labels: Tensor,
                 predictions: Tensor,
                 embeddings: Tensor,
-                fingerprints: list,
-                scaffolds,
-                smiles) -> Tensor:
+                fps_smiles: Optional[Tensor] = None,
+                fps_scaffold: Optional[Tensor] = None,
+                smiles_list: Optional[List[str]] = None) -> Tensor:
+        
         return _aca_loss(
             labels=labels,
             predictions=predictions,
             embeddings=embeddings,
-            fingerprints=fingerprints,
-            scaffolds=scaffolds,
-            smiles=smiles,
+
+            # structure
+            fps_smiles=fps_smiles,
+            fps_scaffold=fps_scaffold,
+            smiles_list=smiles_list,
+
+            # parameters
             alpha=self.alpha,
             cliff_lower=self.cliff_lower,
             cliff_upper=self.cliff_upper,
@@ -157,31 +162,19 @@ def get_label_mask(labels: torch.Tensor,
 
     return mask
 
-def get_scaffold_mask(scaffold_fps, device, struct_threshold_neg=0.9, struct_threshold_pos=1, eps=1e-5):
-    fps = scaffold_fps
-    assert len(fps.size())==2, 'The FP shape should be [batch, fingerprint_dim]'
-    common = torch.bitwise_and(fps.unsqueeze(0),fps.unsqueeze(1))
-    a_add_b = torch.add(fps.unsqueeze(0),fps.unsqueeze(1))
-    
-    C = common.sum(-1)
-    A_add_B = a_add_b.sum(-1)
-    similarity = C / (A_add_B- C + eps)
-    sim_mask_neg = similarity > struct_threshold_neg
-    sim_mask_pos = similarity < struct_threshold_pos
-    # The same as former triplet mask, dim 'j' denotes positive sample, dim 'k' denotes negative samples
-    mask = torch.logical_and(sim_mask_neg.unsqueeze(2), sim_mask_neg.unsqueeze(1)).to(device)
-    return mask
-    
+
 def compute_edit_similarity(s1, s2):
     dist = levenshtein_distance(s1, s2)
     max_len = max(len(s1), len(s2))
     if max_len == 0:
         return 1.0
     return 1.0 - dist / max_len
+
+
 def get_smiles_mask(smiles_list, 
                     device,
                     struct_threshold_neg=0.9, 
-                    struct_threshold_pos=1.0, 
+                    struct_threshold_pos=0.1, 
                     ):
     B = len(smiles_list)
     
@@ -203,18 +196,16 @@ def get_smiles_mask(smiles_list,
     return mask_3d
 
 
-def get_structure_mask(fingerprints: torch.Tensor,
-                        scaffolds,
-                        smiles,
+def get_fingerprint_mask(fingerprints: torch.Tensor,
                        device: torch.device,
-                       similarity_neg: float = 0.9,
-                       similarity_pos: float = 1,
+                       struct_threshold_neg: float = 0.9,
+                       struct_threshold_pos: float = 0.1,
                        eps: float = 1e-5) -> torch.Tensor:
     """
     构造基于指纹（fingerprint）相似度的三元组掩码：
     - fingerprints: BoolTensor，形状 [B, F] torch.tensor unit 8
-    - similarity_neg: Tanimoto 阈值，要求 sim(a, j) > similarity_neg 才算“正样本候选”
-    - similarity_pos: Tanimoto 阈值，要求 sim(a, k) < similarity_pos 才算“负样本候选”
+    - struct_threshold_neg: Tanimoto 阈值，要求 sim(a, j) >= similarity_neg 才算“HARD 负样本候选”
+    - struct_threshold_pos: Tanimoto 阈值，要求 sim(a, k) < similarity_pos 才算“HARD 正样本候选”
     返回：布尔型张量 mask，形状 [B, B, B]
     """
 
@@ -229,17 +220,47 @@ def get_structure_mask(fingerprints: torch.Tensor,
     # 2. Tanimoto
     sim_matrix = intersect / (union + 1e-8)   
 
-
     # 3. 构造 “正样本候选” 与 “负样本候选” 的 2D 掩码
-    sim_hard_neg = sim_matrix > similarity_neg  # [B, B]: i→j Tanimoto > threshold → 可做“硬正”
-    sim_hard_pos = sim_matrix < similarity_pos  # [B, B]: i→k Tanimoto < threshold → 可做“硬负”
+    sim_hard_pos = sim_matrix < struct_threshold_pos  #0.1 [B, B]: i→j Tanimoto < threshold → 可做“硬正”
+    sim_hard_neg = sim_matrix >= struct_threshold_neg #0.9 # [B, B]: i→k Tanimoto >= threshold → 可做“硬负”
 
     # 4. 扩展到 3D：dim=1 对应 j，dim=2 对应 k
-    neg_3d = sim_hard_neg.unsqueeze(1)  # [B, 1, B]
     pos_3d = sim_hard_pos.unsqueeze(2)  # [B, B, 1]
-    mask = pos_3d & neg_3d              # [B, B, B]
+    neg_3d = sim_hard_neg.unsqueeze(1)  # [B, 1, B]
+    mask_3d = pos_3d & neg_3d              # [B, B, B]
 
-    # 5. 再加上“索引两两不相等”的约束，保证 i, j, k 三者不同
+    return mask_3d  # 布尔型张量
+
+
+def get_structure_mask(fps_smiles: torch.Tensor,
+                       fps_scaffold:torch.Tensor,
+                       smiles_list,
+                       device: torch.device,
+                       similarity_neg: float = 0.9,
+                       similarity_pos: float = 0.1,
+                       eps: float = 1e-5) -> torch.Tensor:
+    """
+    构造基于指纹（fingerprint）相似度的三元组掩码：
+    - fps_smiles, fps_scaffold: BoolTensor，形状 [B, F] torch.tensor unit 8
+    - similarity_neg: Tanimoto 阈值，要求 Structure_sim(a, j) >= similarity_neg 才算“负样本候选” （要求负样本候选和anchor很相似）
+    - similarity_pos: Tanimoto 阈值，要求 Structure_sim(a, k) < similarity_pos 才算“正样本候选”（要求正样本候选和anchor很不相似）
+    返回：布尔型张量 mask，形状 [B, B, B]
+    """
+    
+    fingerprint_mask = get_fingerprint_mask(fingerprints=fps_smiles, device=device, 
+                                      struct_threshold_neg=similarity_neg, 
+                                      struct_threshold_pos=similarity_pos)
+    
+    scaffold_mask = get_fingerprint_mask(fingerprints=fps_scaffold, device=device, 
+                                      struct_threshold_neg=similarity_neg, 
+                                      struct_threshold_pos=similarity_pos)
+    
+    smiles_mask = get_smiles_mask(smiles_list=smiles_list, device=device)
+
+
+
+    # 再加上“索引两两不相等”的约束，保证 i, j, k 三者不同
+    B = fps_smiles.size(0)
     idx = torch.arange(B, device=device)
     eq = idx.unsqueeze(0) == idx.unsqueeze(1)  # [B, B]
     neq = ~eq                                  # [B, B]
@@ -247,27 +268,29 @@ def get_structure_mask(fingerprints: torch.Tensor,
     i_ne_k = neq.unsqueeze(1)                # [B, 1, B]
     j_ne_k = neq.unsqueeze(0)                # [1, B, B]
     distinct_idx = i_ne_j & i_ne_k & j_ne_k   # [B, B, B]
-
-    scaffold_mask = get_scaffold_mask(scaffold_fps=scaffolds, device=device, struct_threshold_neg=similarity_neg, struct_threshold_pos=similarity_pos)
-    smiles_mask = get_smiles_mask(smiles, device=device)
-
-    final_mask = (mask | scaffold_mask | smiles_mask) & distinct_idx     # [B, B, B]
+    
+    final_mask = (fp_mask | scaffold_mask | smiles_mask) & distinct_idx     # [B, B, B]
+    
     return final_mask  # 布尔型张量
+
+
 
 
 def _aca_loss(labels: torch.Tensor,
               predictions: torch.Tensor,
               embeddings: torch.Tensor,
-              fingerprints: list,
-              scaffolds,
-              smiles,
+              
+              fps_smiles: torch.Tensor,
+              fps_scaffold: torch.Tensor,
+              smiles_list,
+              
               alpha: float = 0.1,
               cliff_lower: float = 0.2,
               cliff_upper: float = 1.0,
               similarity_gate: bool = False,
-              similarity_neg: float = 0.8,
-              similarity_pos: float = 0.2,
-              gate_type = 'OR',
+              similarity_neg: float = 0.9,
+              similarity_pos: float = 0.1,
+              gate_type = 'AND',
               squared: bool = False,
               p: float = 2.0,
               dev_mode: bool = True,
@@ -279,12 +302,14 @@ def _aca_loss(labels: torch.Tensor,
         labels: [B] or [B,1] tensor of true values.
         predictions: [B] or [B,1] tensor of predicted values.
         embeddings: [B, E] tensor of latent vectors.
-        fingerprints: list of length B (each an RDKit ExplicitBitVect).
+        
+        fps_smiles, fps_scaffold: tensor of length B .
+        
         alpha: weight for the triplet loss term.
         cliff_lower: threshold below which (|Δy| < cliff_lower) defines hard positives.
         cliff_upper: threshold at or above which (|Δy| ≥ cliff_upper) defines hard negatives.
         similarity_gate: if True, apply structural‐similarity filtering.
-        similarity_neg: Tanimoto threshold for positives/negatives (sim > similarity_neg).
+        similarity_neg: Tanimoto threshold for positives/negatives (sim >= similarity_neg).
         similarity_pos: Tanimoto threshold for negatives (sim < similarity_pos).
         gate_type: 
         squared: if True, use squared distances for both MSE and triplet; else use MAE.
@@ -343,9 +368,9 @@ def _aca_loss(labels: torch.Tensor,
     # 5. Build “structure‐based” mask if requested; else all True
     if similarity_gate:
         mask_by_s = get_structure_mask(
-            fingerprints=fingerprints,
-            scaffolds=scaffolds,
-            smiles=smiles,
+            fps_smiles=fps_smiles,
+            fps_scaffold=fps_scaffold,
+            smiles_list=smiles_list,
             device=device,
             similarity_neg=similarity_neg,
             similarity_pos=similarity_pos
@@ -485,7 +510,9 @@ def get_best_cliff_batch(train_dataset,
 get_best_label_threshold = get_best_cliff
 get_best_label_batch = get_best_cliff_batch
 
-def get_best_structure_threshold(fingerprints: list,
+def get_best_structure_threshold(fps_smiles,
+                                 fps_scaffold,
+                                 smiles_list,
                        neg_thresholds: list = list(torch.arange(0.5, 1.0, 0.05).tolist()),
                        pos_thresholds: list = list(torch.arange(0.0, 0.5, 0.05).tolist()),
                        device: torch.device = torch.device('cpu')):
@@ -494,8 +521,8 @@ def get_best_structure_threshold(fingerprints: list,
     mined purely based on结构相似度条件。
 
     Args:
-        fingerprints: 长度 B 的 Python list，每个元素是 RDKit ExplicitBitVect 指纹。
-        neg_thresholds: Tanimoto 阈值列表，用于“硬正/硬负” (sim > neg_threshold)。
+        fps_smiles, fps_scaffold: 长度 B 的 tensor。
+        neg_thresholds: Tanimoto 阈值列表，用于“硬正/硬负” (sim >= neg_threshold)。
         pos_thresholds: Tanimoto 阈值列表，用于“硬负” (sim < pos_threshold)。
         device: torch.device
 
@@ -504,7 +531,7 @@ def get_best_structure_threshold(fingerprints: list,
         best_pos: float, 最佳的 similarity_pos
         df: DataFrame 包含每对 (neg_threshold, pos_threshold, n_triplets) 的列表
     """
-    B = len(fingerprints)
+    B = len(fps_smiles)
     best_neg = 0.0
     best_pos = 0.0
     max_triples = -1
@@ -517,9 +544,9 @@ def get_best_structure_threshold(fingerprints: list,
                 continue
 
             mask = get_structure_mask(
-                fingerprints=fingerprints,
-                scaffolds=scaffolds,
-                smiles=smiles,
+                fps_smiles=fps_smiles,
+                fps_scaffold=fps_scaffold,
+                smiles_list=smiles_list,
                 device=device,
                 similarity_neg=neg,
                 similarity_pos=pos
@@ -565,9 +592,13 @@ def get_best_structure_batch(train_dataset,
     for epoch in tqdm(range(iterations), desc="Epochs", ascii=True):
         for data in loader:
             # 假设 data.fp 是一个长度为 batch_size 的指纹列表
-            fps = data.fp
+            fps_smiles = data.fps_smiles
+            fps_scaffold = data.fps_scaffold
+            smiles_list = data.smiles_list
             neg, pos, _ = get_best_structure_threshold(
-                fingerprints=fps,
+                fps_smiles=fps_smiles,
+                fps_scaffold = fps_scaffold,
+                smiles_list = smiles_list,
                 neg_thresholds=neg_thresholds,
                 pos_thresholds=pos_thresholds,
                 device=device

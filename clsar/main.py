@@ -28,29 +28,14 @@ from rdkit import DataStructs
 sns.set(style='white', font='sans-serif', font_scale=2)
 
 
-def get_morgan_fingerprint(mol, radius=2, nBits=2048, device=None):
-    """
-    Calculates a Morgan fingerprint for a given RDKit Mol and returns a
-    [1, nBits] PyTorch tensor of uint8 (0/1).
-    """
-    # 1) Compute the RDKit bit vector
-    fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol,
-                                                        radius=radius,
-                                                        nBits=nBits)
-    # 2) Convert it to a flat NumPy array of shape (nBits,)
-    arr = np.zeros((nBits,), dtype=np.uint8)
-    DataStructs.ConvertToNumpyArray(fp, arr)
+def get_morgan_fingerprint(mol, radius=2, nBits=2048):
+    """Calculates a Morgan fingerprint for a given RDKit Mol."""
+    return rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=radius, nBits=nBits)
 
-    # 3) Turn into a tensor of shape [1, nBits]
-    tensor = torch.from_numpy(arr).unsqueeze(0)  # now shape [1, 2048]
 
-    # 4) (Optional) move to device
-    if device is not None:
-        tensor = tensor.to(device)
-
-    return tensor
-
-from clsar.feature import Gen39AtomFeatures, Gen39AtomFeatures_full # node/edge feature transformer
+# ——————————————————————————————————————————————————————————————————————————————
+# 注意：下面这些导入需要在 clsar/model 中已经实现过
+from clsar.feature import Gen39AtomFeatures  # node/edge feature transformer
 from clsar.model.model import ACANet_PNA, get_deg, _fix_reproducibility
 from clsar.model.loss import ACALoss, get_best_cliff, get_best_structure_threshold
 from clsar.model.saver import SaveBestModel
@@ -74,8 +59,8 @@ class ACANet:
 
                  # optional structure‐gating parameters (默认不开启)
                  similarity_gate: bool = False,
-                 similarity_neg: float = 0.9,
-                 similarity_pos: float = 1.0,
+                 similarity_neg: float = 0.8,
+                 similarity_pos: float = 0.2,
 
                  # feature parameters
                  pre_transform=Gen39AtomFeatures(),
@@ -178,50 +163,34 @@ class ACANet:
         return model, optimizer, aca_loss, saver
 
     def smiles_to_data(self, smiles_list):
-        data_list = [] 
+        """
+        Convert a list of SMILES strings to a list of PyG Data objects
+        with node/edge features and fingerprint stored in `data.fp`.
+        """
+        data_list = []
         for smiles in smiles_list:
-            data = self.pre_transform(Data(smiles=smiles)) 
+            from rdkit import Chem
+            mol = Chem.MolFromSmiles(smiles)
+            fp = get_morgan_fingerprint(mol)
+            data = Data(smiles=smiles, fp=fp)
+            data = self.pre_transform(data)
             data_list.append(data)
         return data_list
-    
-    
-    
+
     def _Xy_to_dataset(self, Xs, y):
+        """
+        Convert lists Xs (SMILES) and y (labels) into a list of Data objects.
+        """
         dataset = []
         for smi, _y in zip(Xs, y):
+            from rdkit import Chem
+            mol = Chem.MolFromSmiles(smi)
+            fp = get_morgan_fingerprint(mol)
             y_tensor = torch.tensor([_y], dtype=torch.float).view(1, -1)
-            data = self.pre_transform(Data(smiles=smi, y = y_tensor)) 
+            data = Data(smiles=smi, y=y_tensor, fp=fp)
+            data = self.pre_transform(data)
             dataset.append(data)
         return dataset
-    # def smiles_to_data(self, smiles_list):
-    #     """
-    #     Convert a list of SMILES strings to a list of PyG Data objects
-    #     with node/edge features and fingerprint stored in `data.fp`.
-    #     """
-    #     data_list = []
-    #     for smiles in smiles_list:
-    #         from rdkit import Chem
-    #         mol = Chem.MolFromSmiles(smiles)
-    #         fp = get_morgan_fingerprint(mol)
-    #         data = Data(smiles=smiles, fp=fp)
-    #         data = self.pre_transform(data)
-    #         data_list.append(data)
-    #     return data_list
-
-    # def _Xy_to_dataset(self, Xs, y):
-    #     """
-    #     Convert lists Xs (SMILES) and y (labels) into a list of Data objects.
-    #     """
-    #     dataset = []
-    #     for smi, _y in zip(Xs, y):
-    #         from rdkit import Chem
-    #         mol = Chem.MolFromSmiles(smi)
-    #         fp = get_morgan_fingerprint(mol)
-    #         y_tensor = torch.tensor([_y], dtype=torch.float).view(1, -1)
-    #         data = Data(smiles=smi, y=y_tensor, fp=fp)
-    #         data = self.pre_transform(data)
-    #         dataset.append(data)
-    #     return dataset
 
     def _cv_split(self, y_train, n_folds=5, random_state=42):
         """
@@ -533,7 +502,7 @@ class ACANet:
         Predict on a list of SMILES.
         """
         test_dataset = self.smiles_to_data(Xs_test)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
         test_pred = predict(test_loader, self.model, self.device)
         y_pred = test_pred.cpu().numpy().reshape(-1,)
         return y_pred
@@ -562,7 +531,7 @@ class ACANet:
         """
         assert len(self.cv_models) >= 1, 'Please run cv_fit first!'
         test_dataset = self.smiles_to_data(Xs_test)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
 
         cv_preds = []
         for model in self.cv_models:

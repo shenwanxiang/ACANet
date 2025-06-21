@@ -11,8 +11,15 @@ def train(train_loader, model, optimizer, aca_loss, device):
         out, embed = model(data.x.float(), data.edge_index,
                            data.edge_attr, data.batch)
 
-
-        loss = aca_loss(data.y, out, embed, data.fp, data.scaffold_fp, data.smiles)
+        loss = aca_loss(data.y,
+                        labels = data.y, 
+                        predictions = out,
+                        embeddings = embed,
+                        fps_smiles = data.fp_smiles,
+                        fps_scaffold = data.fp_scaffold,                           
+                        smiles_list = data.smiles,                           
+                        )
+        
         #loss = F.mse_loss(out, data.y)
         loss.backward()
         optimizer.step()

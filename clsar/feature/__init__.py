@@ -1,1 +1,1 @@
-from .featurizer import Gen39AtomFeatures, Gen39AtomFeatures_full
+from .featurizer import Gen39AtomFeatures
