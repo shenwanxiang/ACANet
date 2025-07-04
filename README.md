@@ -75,8 +75,8 @@ pip install clsar
 
 ```python
 from clsar import ACANet
-#Xs_train: list of SMILES string of training set
-#y_train_pIC50: the pChEMBL labels of training set
+#Xs_train: the SMILES string of training set (1D Arrary)
+#y_train_pIC50: the pChEMBL labels of training set (1D Arrary)
 
 ## init ACANet
 clf = ACANet(gpuid = 0,   work_dir = './')
