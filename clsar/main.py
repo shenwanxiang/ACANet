@@ -518,6 +518,8 @@ class ACANet:
         
         cv_predictions = []
         for model in self.cv_models:
+            model.to(self.device)
+            model.eval()
             test_pred = predict(test_loader, model, self.device)
             y_pred = test_pred.cpu().numpy().reshape(-1, )    
             cv_predictions.append(y_pred)

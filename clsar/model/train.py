@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from math import sqrt
+from tqdm import tqdm
 
 def train(train_loader, model, optimizer, aca_loss, device):
     model.train()
@@ -39,7 +40,7 @@ def predict(test_loader, model,  device):
     #embeds = []
     model.eval()
     preds = []
-    for data in test_loader:
+    for data in tqdm(test_loader, ascii=True):
         data = data.to(device)
         predictions, embeddings = model(data.x.float(), data.edge_index,
                                         data.edge_attr, data.batch)
