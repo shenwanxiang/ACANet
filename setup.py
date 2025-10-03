@@ -17,8 +17,8 @@ with open("README.md", "r") as fh:
 NAME = "clsar"
 VERSION = clsar.__version__
 AUTHOR = "WanXiang Shen"
-DESCRIPTION = "RRD: A Reactivity-Related bond/atom-wise Descriptors (RRD) package"
-URL = "https://github.com/shenwanxiang/bidd-clsar"
+DESCRIPTION = "Activity Cliff-Informed Contrastive Learning for Molecular Property Prediction"
+URL = "https://github.com/shenwanxiang/ACANet/tree/main"
 
 REQUIRED_PYTHON_VERSION = (3, 7)
 PACKAGES = find_packages(exclude = ['test', 'gallery', 'example', '.ipynb_checkpoints',])
