@@ -6,3 +6,4 @@ numpy
 pandas
 seaborn
 rdkit
+Levenshtein
