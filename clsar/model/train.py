@@ -11,7 +11,7 @@ def train(train_loader, model, optimizer, aca_loss, device):
         out, embed = model(data.x.float(), data.edge_index,
                            data.edge_attr, data.batch)
 
-        loss = aca_loss(data.y,
+        loss = aca_loss(
                         labels = data.y, 
                         predictions = out,
                         embeddings = embed,
