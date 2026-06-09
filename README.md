@@ -6,6 +6,7 @@
 [![Codeocean](https://img.shields.io/badge/reproduction-Codeocean-9cf)](https://codeocean.com/capsule/8102819/tree/v1)
 [![PyPI version](https://badge.fury.io/py/clsar.svg)](https://badge.fury.io/py/clsar)
 [![Downloads](https://static.pepy.tech/badge/clsar)](https://pepy.tech/project/clsar)
+[![DOI](https://zenodo.org/badge/331897550.svg)](https://doi.org/10.5281/zenodo.20607014)
 
 ----------
 Code repository for activity cliff-awareness (ACA) loss and graph-based ACANet model
